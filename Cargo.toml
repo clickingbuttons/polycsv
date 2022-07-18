@@ -1,16 +1,17 @@
 [package]
-name = "polyzdb"
+name = "polycsv"
 version = "0.1.0"
 authors = ["clickingbuttons"]
 edition = "2018"
-description = "CLI to download polygon.io data to zdb"
+description = "CLI to download polygon.io tick data to csv"
 
 [dependencies]
 chrono = "0.4"
-clap = "2.33.3"
 threadpool = "1.8.1"
-polygon_io = { path = "../polygon_io" }
-zdb = { path = "../zdb" }
+polygon_io = "3.2.0"
+csv = "1.1"
+zstd = "0.11.2"
+serde = { version = "1.0", features = ["derive"] }
 
 [profile.release]
 debug = true

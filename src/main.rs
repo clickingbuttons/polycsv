@@ -1,51 +1,19 @@
-mod agg1d;
+mod calendar;
 mod tickers;
-mod agg1m;
 mod trades;
 mod util;
-use polygon_io::client::Client;
-use std::{panic, process};
+
+use chrono::{Duration, NaiveDate, Utc};
+use polygon_io::{client::Client as PolygonClient, reference::ticker_details::TickerDetail};
+use std::{fs::create_dir_all, panic, path::Path, process, time::Instant};
 use threadpool::ThreadPool;
-use agg1d::download_agg1d;
-use tickers::download_tickers;
-use agg1m::download_agg1m;
-use trades::download_trades;
-use clap::{app_from_crate, crate_authors, crate_description, crate_version, crate_name, Arg};
+use tickers::download_tickers_day;
+use trades::download_trades_day;
+use util::MarketDays;
 
 fn main() {
-  let matches = app_from_crate!()
-    .arg(
-      Arg::with_name("data-dir")
-        .help("Adds a directory to save data to to schema of agg1m or trades")
-        .long("data-dir")
-        .takes_value(true)
-        .multiple(true)
-        .default_value("data")
-    )
-    .arg(
-      Arg::with_name("agg1d")
-        .help("Download agg1d data using grouped endpoint")
-        .long("agg1d")
-    )
-    .arg(
-      Arg::with_name("tickers")
-        .help("Download tickers data using reference tickers vX endpoint")
-        .long("tickers")
-    )
-    .arg(
-      Arg::with_name("agg1m")
-        .help("Download agg1m data using agg1d data as an index")
-        .long("agg1m")
-    )
-    .arg(
-      Arg::with_name("trades")
-        .help("Download trade data using agg1d data as an index")
-        .long("trades")
-    )
-    .get_matches();
-  
   // Holds API key and ratelimit
-  let mut client = Client::new();
+  let mut polygon = PolygonClient::new();
 
   // Enough threads to end up blocking on io
   let thread_pool = ThreadPool::new(100);
@@ -57,26 +25,55 @@ fn main() {
     process::exit(1);
   }));
 
-  let agg1d = matches.is_present("agg1d");
-  let tickers = matches.is_present("tickers");
-  let agg1m = matches.is_present("agg1m");
-  let trades = matches.is_present("trades");
-  let download_all = !agg1d && !tickers && !agg1m && !trades;
+  let data_dir = "data";
+  let tickers_dir = format!("{}/tickers", data_dir);
+  create_dir_all(&tickers_dir).expect("mkdir");
+  let trades_dir = format!("{}/trades", data_dir);
+  create_dir_all(&trades_dir).expect("mkdir");
 
-  if download_all || agg1d {
-    download_agg1d(&thread_pool, &mut client);
-  }
-  if download_all || tickers {
-    download_tickers(&thread_pool, &mut client);
+  let start = Instant::now();
+  let from = NaiveDate::from_ymd(2004, 1, 1);
+  let to = Utc::now().naive_utc().date() - Duration::days(4); // polygon backfills from TAQ after 2 days. We want TAQ.
+  let market_days = (MarketDays { from, to }).collect::<Vec<NaiveDate>>();
+  for date in market_days.into_iter().rev() {
+    println!("{}\n", date);
+    let now = Instant::now();
+    let tickers_path = format!("{}/{}.csv", tickers_dir, date);
+    if Path::new(&tickers_path).exists() {
+      eprintln!("{} exists, skipping", tickers_path);
+    } else {
+      let num_tickers = download_tickers_day(date, &thread_pool, &mut polygon, &tickers_path);
+      eprintln!(
+        "{}: Downloaded {} tickers in {}s",
+        date,
+        num_tickers,
+        now.elapsed().as_secs()
+      );
+    }
+
+    let now = Instant::now();
+    let trades_path = format!("{}/{}.csv.zst", trades_dir, date);
+    if Path::new(&trades_path).exists() {
+      eprintln!("{} exists, skipping", trades_path);
+    } else {
+      println!("");
+      eprintln!("{}: Downloading trades", date);
+      let mut tickers = Vec::new();
+      let mut rdr = csv::Reader::from_path(tickers_path).unwrap();
+      for r in rdr.deserialize() {
+        let row: TickerDetail = r.expect("ticker detail");
+        tickers.push(row.ticker);
+      }
+      let num_trades = download_trades_day(date, &thread_pool, &mut polygon, &trades_path, tickers);
+      eprintln!(
+        "{}: Downloaded {} trades in {}s",
+        date,
+        num_trades,
+        now.elapsed().as_secs()
+      );
+    }
   }
 
-  let data_dirs = matches.values_of("data-dir").unwrap().into_iter().collect::<Vec<&str>>();
-  if download_all || agg1m {
-    eprintln!("Downloading agg1m");
-    download_agg1m(&thread_pool, &mut client, data_dirs.clone());
-  }
-  if download_all || trades {
-    eprintln!("Downloading trade data");
-    download_trades(&thread_pool, &mut client, data_dirs.clone());
-  }
+  thread_pool.join();
+  eprintln!("Finished in {}s", start.elapsed().as_secs());
 }

@@ -1,5 +1,5 @@
+use super::calendar::us_equity::is_market_open;
 use chrono::{Duration, NaiveDate};
-use zdb::calendar::us_equity::is_market_open;
 
 pub struct MarketDays {
   pub from: NaiveDate,
