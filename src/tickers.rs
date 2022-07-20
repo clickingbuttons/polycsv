@@ -12,11 +12,12 @@ use std::{
   fs::File,
   process,
   sync::{
-    atomic::{AtomicUsize, Ordering},
     Arc, Mutex
   }
 };
 use threadpool::ThreadPool;
+use linya::Progress;
+use log::{warn, error};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Ticker {
@@ -33,8 +34,9 @@ pub fn download_tickers_day(
   date: NaiveDate,
   thread_pool: &ThreadPool,
   polygon: &mut PolygonClient,
+  progress: Arc<Mutex<Progress>>,
   path: &str
-) -> usize {
+) -> Vec<String> {
   // Tickers v3 endpoint has pagination problems. I'd rather miss some barely
   // traded tickers than 1000s for a day.
   let mut tickers = HashSet::<String>::default();
@@ -48,15 +50,16 @@ pub fn download_tickers_day(
       tickers.insert(ticker.symbol.replace("/", ".").clone());
     });
 
-  eprintln!("{}: Downloading {} tickers", date, tickers.len());
-  let ticker_details = Arc::new(Mutex::new(Vec::<TickerDetail>::new()));
+  let n = tickers.len();
+  let msg = format!("Downloading ticker details for {}", date);
+  let bar = Arc::new(Mutex::new(progress.lock().unwrap().bar(n, msg)));
+  let ticker_details = Arc::new(Mutex::new(Vec::<TickerDetail>::with_capacity(n)));
 
-  let counter = Arc::new(AtomicUsize::new(0));
-  let num_tickers = tickers.len();
   for t in tickers {
     let tickers_details = Arc::clone(&ticker_details);
     let mut client = polygon.clone();
-    let counter = counter.clone();
+		let progress = progress.clone();
+		let bar = bar.clone();
     thread_pool.execute(move || {
       // Retry up to 10 times
       for j in 0..10 {
@@ -66,24 +69,19 @@ pub fn download_tickers_day(
         match client.get_ticker_details(&t, Some(&params)) {
           Ok(result) => {
             tickers_details.lock().unwrap().push(result.results);
-            counter.fetch_add(1, Ordering::Relaxed);
-            println!(
-              "\x1b[1A\x1b[Ktickers: {:3} / {} [{}]",
-              counter.load(Ordering::Relaxed),
-              num_tickers,
-              t
-            );
+						progress.lock().unwrap().inc_and_draw(&bar.lock().unwrap(), 1);
             return;
           }
           Err(e) => {
             // TODO: real errors in polygon_io
             if e.to_string().contains("status: 404") {
-              eprintln!("\x1b[1A\x1b[K{}: no details {}\n", date, t);
+              warn!("no details for {} on {}", t, date);
               return;
             }
-            eprintln!(
-              "\x1b[1A\x1b[K{}: get_ticker_details retry {}: {}\n",
-              date,
+            warn!(
+              "get_ticker_details for {} on {} retry {}: {}",
+							t,
+							date,
               j + 1,
               e.to_string()
             );
@@ -91,21 +89,20 @@ pub fn download_tickers_day(
           }
         }
       }
-      eprintln!("{}: failure\n", &date);
+      error!("failed downloading ticker details for {} on {}", t, date);
       process::exit(1);
     });
   }
   thread_pool.join();
 
   let mut tickers_details = ticker_details.lock().unwrap();
-  let num_rows = tickers_details.len();
   tickers_details.sort_unstable_by(|c1, c2| c1.ticker.cmp(&c2.ticker));
   let writer = File::create(&path).expect("file create");
   let mut writer = csv::Writer::from_writer(writer);
-  for row in tickers_details.drain(..) {
+  for row in tickers_details.iter() {
     writer.serialize(row).expect("serialize");
   }
   writer.flush().expect("flush");
 
-  return num_rows;
+  tickers_details.iter().map(|d| d.ticker.clone()).collect()
 }

@@ -5,28 +5,33 @@ use std::{
   io::ErrorKind,
   process,
   sync::{
-    atomic::{AtomicUsize, Ordering},
     Arc, Mutex
   }
 };
 use threadpool::ThreadPool;
+use linya::Progress;
+use log::{warn, error};
 
 pub fn download_trades_day(
   date: NaiveDate,
   thread_pool: &ThreadPool,
   polygon: &mut PolygonClient,
+  progress: Arc<Mutex<Progress>>,
   path: &str,
   tickers: Vec<String>
 ) -> usize {
   let trades = Arc::new(Mutex::new(Vec::<Trade>::new()));
-  let counter = Arc::new(AtomicUsize::new(0));
-  let num_tickers = tickers.len();
+  let n = tickers.len();
+  let msg = format!("Downloading trades for {}", date);
+  let bar = Arc::new(Mutex::new(progress.lock().unwrap().bar(n, msg)));
+
   for t in tickers.iter() {
     let day_format = date.clone();
     let t = t.clone();
     let trades_day = Arc::clone(&trades);
     let mut client = polygon.clone();
-    let counter = counter.clone();
+		let progress = progress.clone();
+		let bar = bar.clone();
     thread_pool.execute(move || {
       // Retry up to 20 times
       for j in 0..20 {
@@ -34,25 +39,19 @@ pub fn download_trades_day(
           Ok(mut resp) => {
             // println!("{} {:6}: {} candles", month_format, sym, candles.len());
             trades_day.lock().unwrap().append(&mut resp);
-            counter.fetch_add(1, Ordering::Relaxed);
-            println!(
-              "\x1b[1A\x1b[Ktrades : {:5} / {:5} [{}]",
-              counter.load(Ordering::Relaxed),
-              num_tickers,
-              t
-            );
+						progress.lock().unwrap().inc_and_draw(&bar.lock().unwrap(), 1);
             return;
           }
           Err(e) => match e.kind() {
             ErrorKind::UnexpectedEof => {
-              eprintln!("\x1b[1A\x1b[K{}: no trades {}\n", day_format, t);
+              warn!("no trades for {} on {}", t, day_format);
               return;
             }
             _ => {
-              eprintln!(
-                "\x1b[1A\x1b[K{} {}: get_trades retry {}: {}\n",
-                day_format,
+              warn!(
+                "get_trades for {} on {} retry {}: {}",
                 t,
+                day_format,
                 j + 1,
                 e.to_string()
               );
@@ -61,7 +60,7 @@ pub fn download_trades_day(
           }
         }
       }
-      eprintln!("{} {}: failure\n", day_format, t);
+      error!("failed to download trades for {} on {}", t, day_format);
       process::exit(1);
     });
   }
@@ -91,8 +90,6 @@ pub fn download_trades_day(
       writer.serialize(row).expect("serialize");
     }
     writer.flush().expect("flush");
-
-    eprintln!("{}: Done", date);
   });
 
   return num_trades;
