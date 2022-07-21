@@ -79,17 +79,18 @@ pub fn download_trades_day(
     });
 
     let writer = File::create(&*path).expect("file create");
-    let stream = zstd::stream::write::Encoder::new(writer, 0)
-      .expect("zstd")
-      .auto_finish();
+    let mut stream = zstd::stream::write::Encoder::new(writer, 0)
+      .expect("zstd");
     let mut writer = csv::WriterBuilder::new()
       .delimiter('|' as u8)
       .has_headers(true)
-      .from_writer(stream);
+      .from_writer(&mut stream);
     for row in trades.drain(..) {
       writer.serialize(row).expect("serialize");
     }
     writer.flush().expect("flush");
+		drop(writer);
+		stream.finish().expect("flush_zstd");
   });
 
   return num_trades;
