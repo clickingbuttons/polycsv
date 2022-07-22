@@ -1,5 +1,7 @@
 use chrono::NaiveDate;
 use csv;
+use linya::Progress;
+use log::{error, warn};
 use polygon_io::{
   client::Client as PolygonClient,
   core::grouped::{GroupedParams, Locale, Market},
@@ -11,13 +13,9 @@ use std::{
   collections::HashSet,
   fs::File,
   process,
-  sync::{
-    Arc, Mutex
-  }
+  sync::{Arc, Mutex}
 };
 use threadpool::ThreadPool;
-use linya::Progress;
-use log::{warn, error};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Ticker {
@@ -58,8 +56,8 @@ pub fn download_tickers_day(
   for t in tickers {
     let tickers_details = Arc::clone(&ticker_details);
     let mut client = polygon.clone();
-		let progress = progress.clone();
-		let bar = bar.clone();
+    let progress = progress.clone();
+    let bar = bar.clone();
     thread_pool.execute(move || {
       // Retry up to 10 times
       for j in 0..10 {
@@ -69,7 +67,10 @@ pub fn download_tickers_day(
         match client.get_ticker_details(&t, Some(&params)) {
           Ok(result) => {
             tickers_details.lock().unwrap().push(result.results);
-						progress.lock().unwrap().inc_and_draw(&bar.lock().unwrap(), 1);
+            progress
+              .lock()
+              .unwrap()
+              .inc_and_draw(&bar.lock().unwrap(), 1);
             return;
           }
           Err(e) => {
@@ -80,8 +81,8 @@ pub fn download_tickers_day(
             }
             warn!(
               "get_ticker_details for {} on {} retry {}: {}",
-							t,
-							date,
+              t,
+              date,
               j + 1,
               e.to_string()
             );

@@ -1,16 +1,14 @@
 use chrono::NaiveDate;
+use linya::Progress;
+use log::{error, warn};
 use polygon_io::{client::Client as PolygonClient, equities::trades::Trade};
 use std::{
   fs::File,
   io::ErrorKind,
   process,
-  sync::{
-    Arc, Mutex
-  }
+  sync::{Arc, Mutex}
 };
 use threadpool::ThreadPool;
-use linya::Progress;
-use log::{warn, error};
 
 pub fn download_trades_day(
   date: NaiveDate,
@@ -30,8 +28,8 @@ pub fn download_trades_day(
     let t = t.clone();
     let trades_day = Arc::clone(&trades);
     let mut client = polygon.clone();
-		let progress = progress.clone();
-		let bar = bar.clone();
+    let progress = progress.clone();
+    let bar = bar.clone();
     thread_pool.execute(move || {
       // Retry up to 20 times
       for j in 0..20 {
@@ -39,7 +37,10 @@ pub fn download_trades_day(
           Ok(mut resp) => {
             // println!("{} {:6}: {} candles", month_format, sym, candles.len());
             trades_day.lock().unwrap().append(&mut resp);
-						progress.lock().unwrap().inc_and_draw(&bar.lock().unwrap(), 1);
+            progress
+              .lock()
+              .unwrap()
+              .inc_and_draw(&bar.lock().unwrap(), 1);
             return;
           }
           Err(e) => match e.kind() {
@@ -79,8 +80,7 @@ pub fn download_trades_day(
     });
 
     let writer = File::create(&*path).expect("file create");
-    let mut stream = zstd::stream::write::Encoder::new(writer, 0)
-      .expect("zstd");
+    let mut stream = zstd::stream::write::Encoder::new(writer, 0).expect("zstd");
     let mut writer = csv::WriterBuilder::new()
       .delimiter('|' as u8)
       .has_headers(true)
@@ -89,8 +89,8 @@ pub fn download_trades_day(
       writer.serialize(row).expect("serialize");
     }
     writer.flush().expect("flush");
-		drop(writer);
-		stream.finish().expect("flush_zstd");
+    drop(writer);
+    stream.finish().expect("flush_zstd");
   });
 
   return num_trades;
