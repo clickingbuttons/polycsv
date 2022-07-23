@@ -117,7 +117,7 @@ fn main() {
   let start = Instant::now();
   let from = NaiveDate::from_ymd(2004, 1, 1);
   // polygon backfills from TAQ after 2 days
-  let to = Utc::now().naive_utc().date() - Duration::days(3);
+  let to = Utc::now().naive_utc().date() - Duration::days(2);
   // most recent days first
   let market_days = (MarketDays { from, to }).collect::<Vec<NaiveDate>>();
   for date in market_days.into_iter().rev() {
