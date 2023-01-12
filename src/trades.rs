@@ -1,11 +1,10 @@
 use indicatif::{MultiProgress, ProgressBar, ProgressState, ProgressStyle};
-use log::{error, warn};
+use log::warn;
 use polygon_io::client::Client as PolygonClient;
 use std::{
 	fmt::Write,
 	fs::File,
 	path::PathBuf,
-	process,
 	sync::{Arc, Mutex}
 };
 use threadpool::ThreadPool;
@@ -53,14 +52,11 @@ pub fn download_trades_day(
 					}
 					bar.set_message(t);
 					bar.inc(1);
-					return;
 				}
 				Err(e) => {
 					warn!("get_trades for {} on {}: {}", t, date.clone(), e);
 				}
 			}
-			error!("failed to download trades for {} on {}", t, date.clone());
-			process::exit(1);
 		});
 	}
 	thread_pool.join();

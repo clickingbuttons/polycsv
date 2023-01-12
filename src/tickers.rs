@@ -1,6 +1,6 @@
 use csv;
 use indicatif::{MultiProgress, ProgressBar, ProgressState, ProgressStyle};
-use log::{error, warn};
+use log::warn;
 use polygon_io::{
 	client::Client as PolygonClient,
 	core::grouped::{GroupedParams, Locale, Market},
@@ -12,7 +12,6 @@ use std::{
 	fmt::Write,
 	fs::File,
 	path::PathBuf,
-	process,
 	sync::{Arc, Mutex}
 };
 use threadpool::ThreadPool;
@@ -94,14 +93,11 @@ pub fn download_tickers_details_day(
 						.expect("serialize");
 					bar.set_message(t);
 					bar.inc(1);
-					return;
 				}
 				Err(e) => {
 					warn!("get_ticker_details for {} on {}: {}", t, date, e);
 				}
 			}
-			error!("failed downloading ticker details for {} on {}", t, date);
-			process::exit(1);
 		});
 	}
 	thread_pool.join();
