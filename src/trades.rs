@@ -4,7 +4,6 @@ use polygon_io::client::Client as PolygonClient;
 use std::{
 	fmt::Write,
 	fs::File,
-	io::ErrorKind,
 	path::PathBuf,
 	process,
 	sync::{Arc, Mutex}
