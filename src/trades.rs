@@ -1,97 +1,86 @@
-use chrono::NaiveDate;
-use linya::Progress;
+use indicatif::{MultiProgress, ProgressBar, ProgressState, ProgressStyle};
 use log::{error, warn};
-use polygon_io::{client::Client as PolygonClient, equities::trades::Trade};
+use polygon_io::client::Client as PolygonClient;
 use std::{
-  fs::File,
-  io::ErrorKind,
-  process,
-  sync::{Arc, Mutex}
+	fmt::Write,
+	fs::File,
+	io::ErrorKind,
+	path::PathBuf,
+	process,
+	sync::{Arc, Mutex}
 };
 use threadpool::ThreadPool;
 
 pub fn download_trades_day(
-  date: NaiveDate,
-  thread_pool: &ThreadPool,
-  polygon: &mut PolygonClient,
-  progress: Arc<Mutex<Progress>>,
-  path: &str,
-  tickers: Vec<String>
-) -> usize {
-  let trades = Arc::new(Mutex::new(Vec::<Trade>::new()));
-  let n = tickers.len();
-  let msg = format!("Downloading trades for {}", date);
-  let bar = Arc::new(Mutex::new(progress.lock().unwrap().bar(n, msg)));
+	thread_pool: &ThreadPool,
+	polygon: &mut PolygonClient,
+	progress: MultiProgress,
+	date: &str,
+	path: &PathBuf,
+	tickers: Vec<String>
+) {
+	let n_tickers = tickers.len() as u64;
+	let bar = progress.add(ProgressBar::new(n_tickers));
 
-  for t in tickers.iter() {
-    let day_format = date.clone();
-    let t = t.clone();
-    let trades_day = Arc::clone(&trades);
-    let mut client = polygon.clone();
-    let progress = progress.clone();
-    let bar = bar.clone();
-    thread_pool.execute(move || {
-      // Retry up to 20 times
-      for j in 0..20 {
-        match client.get_all_trades(&t, date) {
-          Ok(mut resp) => {
-            // println!("{} {:6}: {} candles", month_format, sym, candles.len());
-            trades_day.lock().unwrap().append(&mut resp);
-            progress
-              .lock()
-              .unwrap()
-              .inc_and_draw(&bar.lock().unwrap(), 1);
-            return;
-          }
-          Err(e) => match e.kind() {
-            ErrorKind::UnexpectedEof => {
-              warn!("no trades for {} on {}", t, day_format);
-              return;
-            }
-            _ => {
-              warn!(
-                "get_trades for {} on {} retry {}: {}",
-                t,
-                day_format,
-                j + 1,
-                e.to_string()
-              );
-              std::thread::sleep(std::time::Duration::from_secs(j + 1));
-            }
-          }
-        }
-      }
-      error!("failed to download trades for {} on {}", t, day_format);
-      process::exit(1);
-    });
-  }
-  thread_pool.join();
-  let num_trades = trades.lock().unwrap().len();
+	let template = "{date} trades  [{elapsed_precise}] [{wide_bar}] {msg:<8} {pos:>5}/{len:5}";
+	let date2 = date.to_string();
+	let style = ProgressStyle::with_template(template)
+		.unwrap()
+		.with_key("date", move |_: &ProgressState, w: &mut dyn Write| {
+			write!(w, "{}", date2).unwrap()
+		});
+	bar.set_style(style.clone());
 
-  let path = Arc::new(path.to_string());
-  thread_pool.execute(move || {
-    let mut trades = trades.lock().unwrap();
-    trades.sort_unstable_by(|c1, c2| {
-      if c1.ticker == c2.ticker {
-        c1.time.cmp(&c2.time)
-      } else {
-        c1.ticker.cmp(&c2.ticker)
-      }
-    });
+	let file = File::create(&path).unwrap();
+	let mut zstd = zstd::stream::write::Encoder::new(file, 1).unwrap();
+	zstd.multithread(4).unwrap();
+	let zstd = zstd.auto_finish();
+	let csv = csv::WriterBuilder::new()
+		.delimiter(b'|' as u8)
+		.has_headers(true)
+		.from_writer(zstd);
+	let writer = Arc::new(Mutex::new(csv));
 
-    let writer = File::create(&*path).expect("file create");
-    let mut stream = zstd::stream::write::Encoder::new(writer, 0).expect("zstd");
-    let mut writer = csv::WriterBuilder::new()
-      .delimiter('|' as u8)
-      .has_headers(true)
-      .from_writer(&mut stream);
-    for row in trades.drain(..) {
-      writer.serialize(row).expect("serialize");
-    }
-    writer.flush().expect("flush");
-    drop(writer);
-    stream.finish().expect("flush_zstd");
-  });
-
-  return num_trades;
+	for t in tickers {
+		let writer = Arc::clone(&writer);
+		let mut client = polygon.clone();
+		let bar = bar.clone();
+		let date = date.to_string();
+		thread_pool.execute(move || {
+			// Retry up to 20 times
+			for j in 0..20 {
+				match client.get_all_trades(&t, &date) {
+					Ok(resp) => {
+						for trade in resp {
+							writer.lock().unwrap().serialize(trade).expect("serialize");
+						}
+						bar.set_message(t);
+						bar.inc(1);
+						return;
+					}
+					Err(e) => match e.kind() {
+						ErrorKind::UnexpectedEof => {
+							warn!("no trades for {} on {}", t, date.clone());
+							return;
+						}
+						_ => {
+							warn!(
+								"get_trades for {} on {} retry {}: {}",
+								t,
+								date.clone(),
+								j + 1,
+								e.to_string()
+							);
+							std::thread::sleep(std::time::Duration::from_secs(j + 1));
+						}
+					}
+				}
+			}
+			error!("failed to download trades for {} on {}", t, date.clone());
+			process::exit(1);
+		});
+	}
+	thread_pool.join();
+	writer.lock().unwrap().flush().unwrap();
+	bar.finish();
 }
