@@ -12,7 +12,7 @@ use threadpool::ThreadPool;
 
 pub fn download_trades_day(
 	thread_pool: &ThreadPool,
-	polygon: &mut PolygonClient,
+	polygon: &PolygonClient,
 	progress: MultiProgress,
 	date: &str,
 	path: &PathBuf,
@@ -42,7 +42,7 @@ pub fn download_trades_day(
 
 	for t in tickers {
 		let writer = Arc::clone(&writer);
-		let mut client = polygon.clone();
+		let client = polygon.clone();
 		let bar = bar.clone();
 		let date = date.to_string();
 		thread_pool.execute(move || {

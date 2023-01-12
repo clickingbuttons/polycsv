@@ -458,13 +458,12 @@ dependencies = [
 
 [[package]]
 name = "polygon_io"
-version = "4.1.0"
+version = "4.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe1dae56eebae98eafa20e9e7a24c91b8d08fff1ea9321e72b117ab690030568"
+checksum = "34531d8dccf50786e781c9c73d0c0c8d5940eff3a47cc1ffef606c8ab3e97dbb"
 dependencies = [
  "backoff",
  "flate2",
- "ratelimit",
  "serde",
  "serde_json",
  "ureq",
@@ -553,12 +552,6 @@ checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
 dependencies = [
  "getrandom",
 ]
-
-[[package]]
-name = "ratelimit"
-version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c4777eb47471c2a42bee8b553b22b8e5c496f657dc6f8b8e29bd69662f31e7e"
 
 [[package]]
 name = "regex-automata"

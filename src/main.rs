@@ -112,25 +112,33 @@ fn download_day(date: &str, tickers_dir: &PathBuf, trades_dir: &PathBuf, test_ti
 	let progress = MultiProgress::new();
 
 	let day_pool = ThreadPool::new(2);
+    let pool = ThreadPool::new(200);
+    let polygon = PolygonClient::new().unwrap();
 	let tickers_path = tickers_dir.join(format!("{}.csv.zst", date));
 	let mut tickers = read_tickers(&tickers_path);
 	if tickers.len() == 0 {
-		let mut polygon = PolygonClient::new().unwrap();
-		let pool = ThreadPool::new(polygon.get_ratelimit() as usize);
-		tickers = list_tickers_day(&mut polygon, &date, test_tickers);
-		let progress = progress.clone();
-		let tickers = tickers.clone();
-		let date = date.clone();
-		day_pool.execute(move || {
-			let now = Instant::now();
-			download_tickers_day(&pool, &mut polygon, progress, &date, &tickers_path, tickers);
-			info!(
-				"Downloaded {:?} in {}s",
-				tickers_path,
-				now.elapsed().as_secs()
-			);
-		});
+		tickers = list_tickers_day(&polygon, &date, test_tickers);
 	}
+
+    if tickers.len() == 0 {
+        return;
+    }
+
+    {
+        let polygon = polygon.clone();
+        let progress = progress.clone();
+        let tickers = tickers.clone();
+        let date = date.clone();
+        day_pool.execute(move || {
+            let now = Instant::now();
+            download_tickers_day(&pool, &polygon, progress, &date, &tickers_path, tickers);
+            info!(
+                "Downloaded {:?} in {}s",
+                tickers_path,
+                now.elapsed().as_secs()
+            );
+        });
+    }
 
 	// Download highly traded tickers first to prevent waiting for pagination at the end
 	let highly_traded = vec![
@@ -151,22 +159,24 @@ fn download_day(date: &str, tickers_dir: &PathBuf, trades_dir: &PathBuf, test_ti
 		return a.partial_cmp(b).unwrap();
 	});
 
-	let trades_path = trades_dir.join(format!("{}.csv.zst", date));
-	if tickers.len() > 0 && !valid_trades_file(&trades_path) {
-		let mut polygon = PolygonClient::new().unwrap();
-		let pool = ThreadPool::new(polygon.get_ratelimit() as usize);
-		let progress = progress.clone();
-		let tickers = tickers.clone();
-		day_pool.execute(move || {
-			let now = Instant::now();
-			download_trades_day(&pool, &mut polygon, progress, &date, &trades_path, tickers);
-			info!(
-				"Downloaded {:?} in {}s",
-				trades_path,
-				now.elapsed().as_secs()
-			);
-		});
-	}
+    {
+        let trades_path = trades_dir.join(format!("{}.csv.zst", date));
+        if !valid_trades_file(&trades_path) {
+            let pool = ThreadPool::new(200);
+            let polygon = polygon.clone();
+            let progress = progress.clone();
+            let tickers = tickers.clone();
+            day_pool.execute(move || {
+                let now = Instant::now();
+                download_trades_day(&pool, &polygon, progress, &date, &trades_path, tickers);
+                info!(
+                    "Downloaded {:?} in {}s",
+                    trades_path,
+                    now.elapsed().as_secs()
+                );
+            });
+        }
+    }
 	day_pool.join();
 }
 
@@ -189,7 +199,10 @@ fn main() {
 	let format = format_description!("[year]-[month]-[day]");
 	let from = time::Date::parse(&args.from, &format).unwrap();
 	let to = time::Date::parse(&args.to, &format).unwrap();
-	eprintln!("ingesting from {} to {}", from, to);
+
+    let msg = format!("ingesting from {} to {}", from, to);
+    eprintln!("{}", msg);
+    info!("{}", msg);
 
 	// Don't want to download known test tickers. TODO: find authoratative source
 	let test_tickers = read_to_string("test_tickers.txt").unwrap();

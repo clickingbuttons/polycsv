@@ -25,7 +25,7 @@ pub struct Ticker {
 }
 
 pub fn list_tickers_day(
-	polygon: &mut PolygonClient,
+	polygon: &PolygonClient,
 	date: &str,
 	test_tickers: &Vec<&str>
 ) -> Vec<String> {
@@ -51,7 +51,7 @@ pub fn list_tickers_day(
 
 pub fn download_tickers_day(
 	thread_pool: &ThreadPool,
-	polygon: &mut PolygonClient,
+	polygon: &PolygonClient,
 	progress: MultiProgress,
 	date: &str,
 	path: &PathBuf,
@@ -80,7 +80,7 @@ pub fn download_tickers_day(
 
 	for t in tickers {
 		let writer = Arc::clone(&writer);
-		let mut client = polygon.clone();
+		let client = polygon.clone();
 		let bar = bar.clone();
 		let date = date.to_string();
 		thread_pool.execute(move || {
