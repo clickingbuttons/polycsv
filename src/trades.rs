@@ -44,18 +44,16 @@ pub fn download_trades_day(
 		let client = polygon.clone();
 		let bar = bar.clone();
 		let date = date.to_string();
-		thread_pool.execute(move || {
-			match client.get_all_trades(&t, &date) {
-				Ok(resp) => {
-					for trade in resp {
-						writer.lock().unwrap().serialize(trade).expect("serialize");
-					}
-					bar.set_message(t);
-					bar.inc(1);
+		thread_pool.execute(move || match client.get_all_trades(&t, &date) {
+			Ok(resp) => {
+				for trade in resp {
+					writer.lock().unwrap().serialize(trade).expect("serialize");
 				}
-				Err(e) => {
-					warn!("get_trades for {} on {}: {}", t, date.clone(), e);
-				}
+				bar.set_message(t);
+				bar.inc(1);
+			}
+			Err(e) => {
+				warn!("get_trades for {} on {}: {}", t, date.clone(), e);
 			}
 		});
 	}

@@ -56,7 +56,9 @@ fn read_tickers(path: &PathBuf) -> Vec<String> {
 				.delimiter(b'|')
 				.from_reader(buf.as_slice());
 			for r in rdr.deserialize() {
-				let row: TickerDetail = r.expect("ticker detail");
+				let row: TickerDetail = r
+					.map_err(|e| format!("reading {}: {}", path.to_string_lossy(), e))
+					.expect("ticker detail");
 				res.push(row.ticker);
 			}
 		}
