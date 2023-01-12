@@ -49,7 +49,7 @@ pub fn list_tickers_day(
 		.collect::<Vec<String>>()
 }
 
-pub fn download_tickers_day(
+pub fn download_tickers_details_day(
 	thread_pool: &ThreadPool,
 	polygon: &PolygonClient,
 	progress: MultiProgress,
