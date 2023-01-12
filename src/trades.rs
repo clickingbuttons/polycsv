@@ -47,33 +47,17 @@ pub fn download_trades_day(
 		let bar = bar.clone();
 		let date = date.to_string();
 		thread_pool.execute(move || {
-			// Retry up to 20 times
-			for j in 0..20 {
-				match client.get_all_trades(&t, &date) {
-					Ok(resp) => {
-						for trade in resp {
-							writer.lock().unwrap().serialize(trade).expect("serialize");
-						}
-						bar.set_message(t);
-						bar.inc(1);
-						return;
+			match client.get_all_trades(&t, &date) {
+				Ok(resp) => {
+					for trade in resp {
+						writer.lock().unwrap().serialize(trade).expect("serialize");
 					}
-					Err(e) => match e.kind() {
-						ErrorKind::UnexpectedEof => {
-							warn!("no trades for {} on {}", t, date.clone());
-							return;
-						}
-						_ => {
-							warn!(
-								"get_trades for {} on {} retry {}: {}",
-								t,
-								date.clone(),
-								j + 1,
-								e.to_string()
-							);
-							std::thread::sleep(std::time::Duration::from_secs(j + 1));
-						}
-					}
+					bar.set_message(t);
+					bar.inc(1);
+					return;
+				}
+				Err(e) => {
+					warn!("get_trades for {} on {}: {}", t, date.clone(), e);
 				}
 			}
 			error!("failed to download trades for {} on {}", t, date.clone());

@@ -24,7 +24,11 @@ pub struct Ticker {
 	pub day:    String
 }
 
-pub fn list_tickers_day(polygon: &mut PolygonClient, date: &str, test_tickers: &Vec<&str>) -> Vec<String> {
+pub fn list_tickers_day(
+	polygon: &mut PolygonClient,
+	date: &str,
+	test_tickers: &Vec<&str>
+) -> Vec<String> {
 	// Tickers v3 endpoint has pagination problems. I'd rather miss some barely
 	// traded tickers than 1000s for a day.
 	let mut tickers = HashSet::<String>::default();
@@ -38,10 +42,11 @@ pub fn list_tickers_day(polygon: &mut PolygonClient, date: &str, test_tickers: &
 			tickers.insert(ticker.symbol.replace("/", ".").clone());
 		});
 
-    // Don't want to download anything for test tickers
-	tickers.into_iter()
-        .filter(|t| !test_tickers.contains(&t.as_str()))
-        .collect::<Vec<String>>()
+	// Don't want to download anything for test tickers
+	tickers
+		.into_iter()
+		.filter(|t| !test_tickers.contains(&t.as_str()))
+		.collect::<Vec<String>>()
 }
 
 pub fn download_tickers_day(
@@ -79,35 +84,20 @@ pub fn download_tickers_day(
 		let bar = bar.clone();
 		let date = date.to_string();
 		thread_pool.execute(move || {
-			// Retry up to 10 times
-			for j in 0..10 {
-				let params = TickerDetailsParams::new().date(&date).params;
-				match client.get_ticker_details(&t, Some(&params)) {
-					Ok(result) => {
-						writer
-							.lock()
-							.unwrap()
-							.serialize(result.results)
-							.expect("serialize");
-						bar.set_message(t);
-						bar.inc(1);
-						return;
-					}
-					Err(e) => {
-						// TODO: real error types in polygon_io
-						if e.to_string().contains("status: 404") {
-							warn!("no details for {} on {}", t, date);
-							return;
-						}
-						warn!(
-							"get_ticker_details for {} on {} retry {}: {}",
-							t,
-							date,
-							j + 1,
-							e.to_string()
-						);
-						std::thread::sleep(std::time::Duration::from_secs(j + 1));
-					}
+			let params = TickerDetailsParams::new().date(&date).params;
+			match client.get_ticker_details(&t, Some(&params)) {
+				Ok(result) => {
+					writer
+						.lock()
+						.unwrap()
+						.serialize(result.results)
+						.expect("serialize");
+					bar.set_message(t);
+					bar.inc(1);
+					return;
+				}
+				Err(e) => {
+					warn!("get_ticker_details for {} on {}: {}", t, date, e);
 				}
 			}
 			error!("failed downloading ticker details for {} on {}", t, date);

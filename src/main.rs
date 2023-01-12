@@ -7,7 +7,7 @@ use log::{info, warn};
 use polygon_io::{client::Client as PolygonClient, reference::ticker_details::TickerDetail};
 use std::{
 	cmp::Ordering,
-	fs::{create_dir_all, File, read_to_string},
+	fs::{create_dir_all, read_to_string, File},
 	io::Read,
 	panic,
 	path::{Path, PathBuf},
@@ -152,7 +152,7 @@ fn download_day(date: &str, tickers_dir: &PathBuf, trades_dir: &PathBuf, test_ti
 	});
 
 	let trades_path = trades_dir.join(format!("{}.csv.zst", date));
-	if !valid_trades_file(&trades_path) {
+	if tickers.len() > 0 && !valid_trades_file(&trades_path) {
 		let mut polygon = PolygonClient::new().unwrap();
 		let pool = ThreadPool::new(polygon.get_ratelimit() as usize);
 		let progress = progress.clone();
@@ -191,9 +191,9 @@ fn main() {
 	let to = time::Date::parse(&args.to, &format).unwrap();
 	eprintln!("ingesting from {} to {}", from, to);
 
-    // Don't want to download known test tickers. TODO: find authoratative source
-    let test_tickers = read_to_string("test_tickers.txt").unwrap();
-    let test_tickers = test_tickers.split("\n").collect::<Vec<&str>>();
+	// Don't want to download known test tickers. TODO: find authoratative source
+	let test_tickers = read_to_string("test_tickers.txt").unwrap();
+	let test_tickers = test_tickers.split("\n").collect::<Vec<&str>>();
 
 	let start = Instant::now();
 	// most recent days first
