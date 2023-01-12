@@ -7,7 +7,7 @@ use log::{info, warn};
 use polygon_io::{client::Client as PolygonClient, reference::ticker_details::TickerDetail};
 use std::{
 	cmp::Ordering,
-	fs::{create_dir_all, File},
+	fs::{create_dir_all, File, read_to_string},
 	io::Read,
 	panic,
 	path::{Path, PathBuf},
@@ -107,7 +107,7 @@ fn is_market_open(date: &Date) -> bool {
 	weekday != Weekday::Saturday && weekday != Weekday::Sunday
 }
 
-fn download_day(date: &str, tickers_dir: &PathBuf, trades_dir: &PathBuf) {
+fn download_day(date: &str, tickers_dir: &PathBuf, trades_dir: &PathBuf, test_tickers: &Vec<&str>) {
 	let date = date.to_string();
 	let progress = MultiProgress::new();
 
@@ -117,7 +117,7 @@ fn download_day(date: &str, tickers_dir: &PathBuf, trades_dir: &PathBuf) {
 	if tickers.len() == 0 {
 		let mut polygon = PolygonClient::new().unwrap();
 		let pool = ThreadPool::new(polygon.get_ratelimit() as usize);
-		tickers = list_tickers_day(&mut polygon, &date);
+		tickers = list_tickers_day(&mut polygon, &date, test_tickers);
 		let progress = progress.clone();
 		let tickers = tickers.clone();
 		let date = date.clone();
@@ -191,6 +191,10 @@ fn main() {
 	let to = time::Date::parse(&args.to, &format).unwrap();
 	eprintln!("ingesting from {} to {}", from, to);
 
+    // Don't want to download known test tickers. TODO: find authoratative source
+    let test_tickers = read_to_string("test_tickers.txt").unwrap();
+    let test_tickers = test_tickers.split("\n").collect::<Vec<&str>>();
+
 	let start = Instant::now();
 	// most recent days first
 	let mut date = to.clone();
@@ -199,7 +203,7 @@ fn main() {
 		if !is_market_open(&date) {
 			continue;
 		}
-		download_day(&date.to_string(), &tickers_dir, &trades_dir);
+		download_day(&date.to_string(), &tickers_dir, &trades_dir, &test_tickers);
 	}
 
 	eprintln!("Finished in {}s", start.elapsed().as_secs());

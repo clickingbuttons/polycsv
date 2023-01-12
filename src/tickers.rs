@@ -24,7 +24,7 @@ pub struct Ticker {
 	pub day:    String
 }
 
-pub fn list_tickers_day(polygon: &mut PolygonClient, date: &str) -> Vec<String> {
+pub fn list_tickers_day(polygon: &mut PolygonClient, date: &str, test_tickers: &Vec<&str>) -> Vec<String> {
 	// Tickers v3 endpoint has pagination problems. I'd rather miss some barely
 	// traded tickers than 1000s for a day.
 	let mut tickers = HashSet::<String>::default();
@@ -37,7 +37,11 @@ pub fn list_tickers_day(polygon: &mut PolygonClient, date: &str) -> Vec<String> 
 		.for_each(|ticker| {
 			tickers.insert(ticker.symbol.replace("/", ".").clone());
 		});
-	tickers.iter().map(|d| d.clone()).collect()
+
+    // Don't want to download anything for test tickers
+	tickers.into_iter()
+        .filter(|t| !test_tickers.contains(&t.as_str()))
+        .collect::<Vec<String>>()
 }
 
 pub fn download_tickers_day(
