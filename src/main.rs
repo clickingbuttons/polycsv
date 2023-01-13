@@ -210,11 +210,12 @@ fn main() {
 	// most recent days first
 	let mut date = to.clone();
 	while date >= from {
-		date -= Duration::days(1);
 		if !is_market_open(&date) {
+			date -= Duration::days(1);
 			continue;
 		}
 		download_day(&date.to_string(), &tickers_dir, &trades_dir, &test_tickers);
+		date -= Duration::days(1);
 	}
 
 	eprintln!("Finished in {}s", start.elapsed().as_secs());
