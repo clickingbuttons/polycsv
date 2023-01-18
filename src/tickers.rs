@@ -4,7 +4,7 @@ use log::warn;
 use polygon_io::{
 	client::Client as PolygonClient,
 	core::grouped::{GroupedParams, Locale, Market},
-	reference::ticker_details::{TickerDetail, TickerDetailsParams}
+	reference::ticker_details::{TickerDetail, TickerDetailsParams},
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -12,7 +12,7 @@ use std::{
 	fmt::Write,
 	fs::File,
 	path::PathBuf,
-	sync::{Arc, Mutex}
+	sync::{Arc, Mutex},
 };
 use threadpool::ThreadPool;
 
@@ -20,13 +20,13 @@ use threadpool::ThreadPool;
 pub struct Ticker {
 	#[serde(flatten)]
 	pub detail: TickerDetail,
-	pub day:    String
+	pub day: String,
 }
 
 pub fn list_tickers_day(
 	polygon: &PolygonClient,
 	date: &str,
-	test_tickers: &Vec<&str>
+	test_tickers: &Vec<&str>,
 ) -> Vec<String> {
 	// Tickers v3 endpoint has pagination problems. I'd rather miss some barely
 	// traded tickers than 1000s for a day.
@@ -54,7 +54,7 @@ pub fn download_tickers_details_day(
 	progress: MultiProgress,
 	date: &str,
 	path: &PathBuf,
-	tickers: Vec<String>
+	tickers: Vec<String>,
 ) {
 	let n_tickers = tickers.len() as u64;
 	let bar = progress.add(ProgressBar::new(n_tickers));

@@ -5,7 +5,7 @@ use std::{
 	fmt::Write,
 	fs::File,
 	path::PathBuf,
-	sync::{Arc, Mutex}
+	sync::{Arc, Mutex},
 };
 use threadpool::ThreadPool;
 
@@ -15,7 +15,7 @@ pub fn download_trades_day(
 	progress: MultiProgress,
 	date: &str,
 	path: &PathBuf,
-	tickers: Vec<String>
+	tickers: Vec<String>,
 ) {
 	let n_tickers = tickers.len() as u64;
 	let bar = progress.add(ProgressBar::new(n_tickers));

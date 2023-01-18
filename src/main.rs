@@ -7,12 +7,12 @@ use log::{info, warn};
 use polygon_io::{client::Client as PolygonClient, reference::ticker_details::TickerDetail};
 use std::{
 	cmp::Ordering,
-	fs::{create_dir_all, read_to_string, File},
+	fs::{create_dir_all, File},
 	io::Read,
 	panic,
 	path::{Path, PathBuf},
 	process,
-	time::Instant
+	time::Instant,
 };
 use threadpool::ThreadPool;
 use tickers::{download_tickers_details_day, list_tickers_day};
@@ -34,9 +34,9 @@ struct Cli {
 	#[arg(short, long, default_value = "data")]
 	data_dir: PathBuf,
 	#[arg(short, long, default_value = "2003-09-10")]
-	from:     String,
+	from: String,
 	#[arg(short, long, default_value_t = tplus3())]
-	to:       String
+	to: String,
 }
 
 fn read_tickers(path: &PathBuf) -> Vec<String> {
@@ -202,8 +202,9 @@ fn main() {
 	eprintln!("{}", msg);
 	info!("{}", msg);
 
-	// Don't want to download known test tickers. TODO: find authoratative source
-	let test_tickers = read_to_string("test_tickers.txt").unwrap();
+	// Don't want to download known test tickers.
+	// TODO: find authoratative source
+	let test_tickers = include_str!("../test_tickers.txt");
 	let test_tickers = test_tickers.split("\n").collect::<Vec<&str>>();
 
 	let start = Instant::now();
