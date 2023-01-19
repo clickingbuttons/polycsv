@@ -47,6 +47,10 @@ pub fn download_trades_day(
 		thread_pool.execute(move || match client.get_all_trades(&t, &date) {
 			Ok(resp) => {
 				for trade in resp {
+					// Polygon bug includes OTCs in grouped daily for 2022-06-21 and 2022-06-22
+					if trade.exchange == 62 {
+						continue;
+					}
 					writer.lock().unwrap().serialize(trade).expect("serialize");
 				}
 				bar.set_message(t);
