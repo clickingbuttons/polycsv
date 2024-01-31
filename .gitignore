@@ -1,6 +1,5 @@
-/target
-/data*
-/logs
-polygon.json
-*.log
-
+.gdb_history
+zig-cache/
+zig-out/
+*.bfbs
+*.afb
