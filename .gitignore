@@ -1,6 +1,5 @@
-node_modules
-tickers
-trades
-quotes
-log.txt
-dist
+.gdb_history
+zig-cache/
+zig-out/
+*.bfbs
+*.afb

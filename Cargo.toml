@@ -1,0 +1,22 @@
+[package]
+name = "polycsv"
+version = "0.2.0"
+authors = ["clickingbuttons"]
+edition = "2021"
+description = "CLI to download polygon.io tick data to csv"
+
+[dependencies]
+threadpool = "1.8.1"
+polygon_io = "4.2.0"
+csv = "1.1.6"
+zstd = { version = "0.12.2", features = ["zstdmt"] }
+serde = { version = "1.0", features = ["derive"] }
+fern = "0.6.1"
+log = "0.4.17"
+indicatif = "0.17.2"
+clap = { version = "4.0.32", features = ["derive"] }
+time = { version = "0.3.17", features = ["formatting", "local-offset", "macros", "parsing"] }
+
+[profile.release]
+debug = true
+
