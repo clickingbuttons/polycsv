@@ -3,7 +3,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 pub const HeaderIndex = u31;
 
-const ParsingError = error {
+const ParsingError = error{
     MissingField,
 };
 
@@ -31,7 +31,7 @@ pub fn Reader(comptime ReaderType: type, comptime T: type) type {
         const Self = @This();
 
         pub fn init(allocator: Allocator, source: ReaderType, options: ReaderOptions) Self {
-           return Self{
+            return Self{
                 .allocator = allocator,
                 .source = source,
                 .options = options,
@@ -47,27 +47,27 @@ pub fn Reader(comptime ReaderType: type, comptime T: type) type {
         pub fn readHeader(self: *Self) !void {
             var found = [_]bool{false} ** struct_fields.len;
 
-           // Given struct A,B,C
-           // And header   D,C,B,A
-           // Sets indices n,2,1,0
+            // Given struct A,B,C
+            // And header   D,C,B,A
+            // Sets indices n,2,1,0
             while (try self.readField()) |s| {
                 var index: ?HeaderIndex = null;
-               inline for (struct_fields, 0..) |f, i| {
-                   if (std.mem.eql(u8, s, f.name)) {
-                       index = @intCast(i);
-                       found[i] = true;
-                       break;
-                   }
-               }
-               try self.header_struct_field_indices.append(self.allocator, index);
+                inline for (struct_fields, 0..) |f, i| {
+                    if (std.mem.eql(u8, s, f.name)) {
+                        index = @intCast(i);
+                        found[i] = true;
+                        break;
+                    }
+                }
+                try self.header_struct_field_indices.append(self.allocator, index);
             }
 
-           inline for (struct_fields, 0..) |f, i| {
-               if (f.default_value == null and !found[i]) {
-                   std.log.err("CSV header missing struct field {s}\n", .{ f.name });
-                   return ParsingError.MissingField;
-               }
-           }
+            inline for (struct_fields, 0..) |f, i| {
+                if (f.default_value == null and !found[i]) {
+                    std.log.err("CSV header missing struct field {s}\n", .{f.name});
+                    return ParsingError.MissingField;
+                }
+            }
         }
 
         /// Caller owns returned slice.
@@ -129,7 +129,7 @@ pub fn Reader(comptime ReaderType: type, comptime T: type) type {
                             continue;
                         }
                         // "a"b
-                        std.debug.print("unexpected char {c}\n", .{ c });
+                        std.debug.print("unexpected char {c}\n", .{c});
                         return error.Parsing;
                     },
                 }
@@ -153,7 +153,7 @@ pub fn Reader(comptime ReaderType: type, comptime T: type) type {
 
                     var res = std.ArrayList(p.child).init(allocator);
                     errdefer res.deinit();
-                    const v  = if (value[0] == '[') value[1..value.len - 1] else value;
+                    const v = if (value[0] == '[') value[1 .. value.len - 1] else value;
                     var split = std.mem.splitScalar(u8, v, self.options.array_delimiter);
                     while (split.next()) |n| {
                         const arr_item = try self.parse(p.child, n);
@@ -171,17 +171,16 @@ pub fn Reader(comptime ReaderType: type, comptime T: type) type {
                 // .Enum: Enum,
                 // .Union: Union,
                 // .Vector: Vector,
-                else => {}
+                else => {},
             }
             @compileError("csv parser cannot parse type " ++ @typeName(U));
         }
 
-
         pub fn next(self: *Self) !?T {
             if (self.header_struct_field_indices.items.len == 0) {
-               inline for (0..struct_fields.len) |i| {
-                   try self.header_struct_field_indices.append(self.allocator, i);
-               }
+                inline for (0..struct_fields.len) |i| {
+                    try self.header_struct_field_indices.append(self.allocator, i);
+                }
             }
 
             var res: T = undefined;
@@ -226,19 +225,19 @@ fn expectHeader(comptime T: type, comptime expected: []const ?HeaderIndex, csv: 
 test "header order" {
     try expectHeader(
         struct { A: u32, B: u32, C: u32 },
-        &[_]?HeaderIndex{2, 0, 1},
+        &[_]?HeaderIndex{ 2, 0, 1 },
         "C,A,B",
     );
 
     try expectHeader(
         struct { A: u32, B: u32, C: u32 = 2 },
-        &[_]?HeaderIndex{0, 1},
+        &[_]?HeaderIndex{ 0, 1 },
         "A,B",
     );
 
     try std.testing.expectError(ParsingError.MissingField, expectHeader(
         struct { A: u32, B: u32, C: u32 },
-        &[_]?HeaderIndex{0, 1},
+        &[_]?HeaderIndex{ 0, 1 },
         "A,B",
     ));
 }
@@ -266,9 +265,9 @@ test "1 row" {
     const csv =
         \\C,A,B
         \\1,2,3
-        ;
+    ;
 
-    try expectStream(ABC, &[_]ABC{.{.A = 2, .B = 3, .C = 1}}, csv);
+    try expectStream(ABC, &[_]ABC{.{ .A = 2, .B = 3, .C = 1 }}, csv);
 }
 
 test "nullable row" {
@@ -276,9 +275,9 @@ test "nullable row" {
     const csv =
         \\C,A,B
         \\1,,3
-        ;
+    ;
 
-    try expectStream(ABC, &[_]ABC{.{.A = null, .B = 3, .C = 1}}, csv);
+    try expectStream(ABC, &[_]ABC{.{ .A = null, .B = 3, .C = 1 }}, csv);
 }
 
 test "string" {
@@ -292,9 +291,9 @@ test "string" {
     const csv =
         \\A
         \\hello
-        ;
+    ;
 
-    try expectStream(A, &[_]A{.{.A = "hello"}}, csv);
+    try expectStream(A, &[_]A{.{ .A = "hello" }}, csv);
 }
 
 test "field escaping" {
@@ -309,9 +308,9 @@ test "field escaping" {
         \\A
         \\"hello, friend"
         \\"i said ""hello"""
-        ;
+    ;
 
-    try expectStream(A, &[_]A{.{.A = "hello, friend"}, .{.A = "i said \"hello\""}}, csv);
+    try expectStream(A, &[_]A{ .{ .A = "hello, friend" }, .{ .A = "i said \"hello\"" } }, csv);
 }
 
 test "slice" {
@@ -325,7 +324,7 @@ test "slice" {
     const csv =
         \\A
         \\"[1,2,3]"
-        ;
+    ;
 
-    try expectStream(A, &[_]A{.{.A = &[_]u32{1,2,3}}}, csv);
+    try expectStream(A, &[_]A{.{ .A = &[_]u32{ 1, 2, 3 } }}, csv);
 }

@@ -1,5 +1,6 @@
 .gdb_history
 zig-cache/
 zig-out/
-*.bfbs
-*.afb
+log.txt
+tickers
+trades
