@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const Polygon = @import("./polygon.zig");
 const time = @import("./time.zig");
 const Downloader = @import("./downloader.zig");
@@ -11,6 +12,11 @@ var log_file: std.fs.File = undefined;
 
 pub const std_options = struct {
     pub const logFn = myLogFn;
+
+    pub const log_level: std.log.Level = switch (builtin.mode) {
+        .Debug => .debug,
+        else => .info,
+    };
 };
 
 pub fn myLogFn(
