@@ -4,6 +4,7 @@ const Polygon = @import("./polygon.zig");
 pub const TickerSet = std.StringHashMap(void);
 const log = std.log;
 const Allocator = std.mem.Allocator;
+const FileWriter = std.io.BufferedWriter(4096, std.fs.File.Writer).Writer;
 
 allocator: Allocator,
 client: Polygon,
@@ -29,10 +30,10 @@ pub fn deinit(self: *Self) void {
     self.client.deinit();
 }
 
-pub fn download(self: *Self, day: []const u8) !void {
+pub fn download(self: *Self, date: []const u8) !void {
     const allocator = self.allocator;
 
-    const csv = try self.client.groupedDaily(day);
+    const csv = try self.client.groupedDaily(date);
     defer allocator.free(csv);
 
     var tickers: TickerSet = brk: {
@@ -41,7 +42,7 @@ pub fn download(self: *Self, day: []const u8) !void {
         var lines = std.mem.splitScalar(u8, csv, '\n');
         if (lines.next()) |header| {
             if (!std.mem.startsWith(u8, header, "T")) {
-                log.err("unexpected grouped daily csv header {s} on {s}", .{ header, day });
+                log.err("unexpected grouped daily csv header {s} on {s}", .{ header, date });
                 return error.InvalidCsvHeader;
             }
             while (lines.next()) |l| {
@@ -54,45 +55,65 @@ pub fn download(self: *Self, day: []const u8) !void {
     };
     defer tickers.deinit();
 
-    log.info("{s} {d}", .{ day, tickers.unmanaged.size });
+    log.info("{s} {d}", .{ date, tickers.unmanaged.size });
 
-    var new_test_tickers = try self.downloadTickers(day, tickers);
+    var new_test_tickers = try self.downloadTickers(date, tickers);
     defer new_test_tickers.deinit();
 
     var iter = new_test_tickers.keyIterator();
-    while (iter.next()) |t| log.info("new test ticker {s}", .{t});
+    while (iter.next()) |t| {
+        log.info("new test ticker {s}", .{t.*});
+        _ = tickers.remove(t.*);
+    }
+
+    try self.downloadTrades(date, tickers);
 }
 
-/// Called owns returned TickerSet
-fn downloadTickers(self: *Self, date: []const u8, tickers: TickerSet) !TickerSet {
+fn columnIndex(columns: []const u8, column: []const u8) ?usize {
+    var column_iter = std.mem.splitScalar(u8, columns, ',');
+    var i: usize = 0;
+    while (column_iter.next()) |c| : (i += 1) {
+        if (std.mem.eql(u8, c, column)) return i;
+    }
+
+    return null;
+}
+
+fn openFile(self: *Self, dir: []const u8, date: []const u8) !std.fs.File {
     const allocator = self.allocator;
-    const path = try std.fmt.allocPrint(allocator, "tickers/{s}.csv", .{date});
+    const path = try std.fmt.allocPrint(allocator, "{s}/{s}.csv", .{dir,date});
     defer allocator.free(path);
 
-    var out = try std.fs.cwd().createFile(path, .{});
-    defer out.close();
+    try std.fs.cwd().makePath(dir);
+    return try std.fs.cwd().createFile(path, .{});
+}
+
+/// Caller owns returned TickerSet
+fn downloadTickers(self: *Self, date: []const u8, tickers: TickerSet) !TickerSet {
+    const allocator = self.allocator;
 
     var prog = self.progress.start("ticker details", tickers.unmanaged.size);
+    prog.setUnit(" tickers");
     prog.activate();
+
+    var out = try self.openFile("tickers", date);
+    defer out.close();
+
+    var buffered = std.io.bufferedWriter(out.writer());
+    var writer: FileWriter = buffered.writer();
 
     var res = TickerSet.init(allocator);
 
     const sample = try self.client.tickerDetails("AAPL", "");
     defer allocator.free(sample);
 
-    const newline = std.mem.indexOfScalar(u8, sample, '\n').?;
-    const expected_columns = sample[0..newline];
-    var column_iter = std.mem.splitScalar(u8, expected_columns, ',');
-    var is_test_i: ?usize = null;
+    var lines = std.mem.splitScalar(u8, sample, '\n');
+    const expected_columns = lines.first();
 
-    var i: usize = 0;
-    while (column_iter.next()) |c| : (i += 1) {
-        if (std.mem.eql(u8, c, "is_test")) {
-            is_test_i = i;
-            break;
-        }
-    }
+    const is_test_i = columnIndex(expected_columns, "is_test");
     if (is_test_i == null) log.warn("no ticker details test column", .{});
+
+    try writer.print("{s}\n", .{ expected_columns });
 
     self.wait_group.reset();
     var keys = tickers.keyIterator();
@@ -100,7 +121,7 @@ fn downloadTickers(self: *Self, date: []const u8, tickers: TickerSet) !TickerSet
         self.wait_group.start();
         try self.thread_pool.spawn(downloadTickerWorker, .{
             self,
-            &out,
+            &writer,
             date,
             t.*,
             expected_columns,
@@ -111,14 +132,16 @@ fn downloadTickers(self: *Self, date: []const u8, tickers: TickerSet) !TickerSet
     }
     self.wait_group.wait();
 
+    try buffered.flush();
     prog.end();
+    if (prog.parent) |p| p.setCompletedItems(p.unprotected_completed_items - 1);
 
     return res;
 }
 
 fn downloadTickerWorker(
     self: *Self,
-    out: *std.fs.File,
+    writer: *FileWriter,
     date: []const u8,
     ticker: []const u8,
     expected_header: []const u8,
@@ -149,6 +172,7 @@ fn downloadTickerWorker(
     }
 
     if (lines.next()) |data| {
+        if (data.len == 0) return; // empty response
         self.mutex.lock();
         defer self.mutex.unlock();
 
@@ -165,9 +189,103 @@ fn downloadTickerWorker(
                 log.err("expected test field at index {d} since header matched", .{i});
             }
         }
-        out.writer().writeAll(data) catch |err| {
+        writer.print("{s}\n", .{ data }) catch |err| {
             log.err("{}", .{err});
             return;
         };
     }
+}
+
+/// Caller owns returned TickerSet
+fn downloadTrades(self: *Self, date: []const u8, tickers: TickerSet) !void {
+    const allocator = self.allocator;
+
+    var prog = self.progress.start("trades", tickers.unmanaged.size);
+    prog.setUnit(" tickers");
+    prog.activate();
+
+    var out = try self.openFile("trades", date);
+    defer out.close();
+
+    var buffered = std.io.bufferedWriter(out.writer());
+    var writer: FileWriter = buffered.writer();
+
+    var sample  = std.ArrayListUnmanaged(u8){};
+    defer sample.deinit(allocator);
+    try self.client.trades("ASD", "2003-09-10", sample.writer(allocator));
+
+    var lines = std.mem.splitScalar(u8, sample.items, '\n');
+    const expected_columns = lines.first();
+
+    try writer.print("ticker,{s}\n", .{ expected_columns });
+
+    self.wait_group.reset();
+    var keys = tickers.keyIterator();
+    while (keys.next()) |t| {
+        self.wait_group.start();
+        try self.thread_pool.spawn(downloadTradesWorker, .{
+            self,
+            &writer,
+            date,
+            t.*,
+            expected_columns,
+            &prog,
+        });
+    }
+    self.wait_group.wait();
+
+    try buffered.flush();
+    prog.end();
+    if (prog.parent) |p| p.setCompletedItems(p.unprotected_completed_items - 1);
+}
+
+// The trades endpoint is paginated (requires removing header) AND missing a `ticker` column.
+pub const TradesSink = struct {
+    header: []const u8,
+    out: *FileWriter,
+    mutex: *std.Thread.Mutex,
+    ticker: []const u8,
+
+    pub fn writeAll(self: @This(), csv: []const u8) !void {
+        var lines = std.mem.splitScalar(u8, csv, '\n');
+        const header = lines.first();
+        if (header.len > 0) {
+            if (!std.mem.eql(u8, header, self.header)) {
+                log.err("invalid trades header for {s}: {s}", .{ self.ticker, header });
+            }
+        }
+
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        while (lines.next()) |l| {
+            if (l.len == 0) continue;
+            try self.out.print("{s},{s}\n", .{ self.ticker, l });
+        }
+    }
+};
+
+fn downloadTradesWorker(
+    self: *Self,
+    writer: *FileWriter,
+    date: []const u8,
+    ticker: []const u8,
+    expected_header: []const u8,
+    prog: *std.Progress.Node,
+) void {
+    defer {
+        self.wait_group.finish();
+        prog.completeOne();
+    }
+
+    var sink = TradesSink{
+        .header = expected_header,
+       .out  = writer,
+       .ticker = ticker,
+       .mutex = &self.mutex
+    };
+
+    self.client.trades(ticker, date, sink) catch |err| {
+        log.err("error getting details for {s}: {}", .{ ticker, err });
+        return;
+    };
 }

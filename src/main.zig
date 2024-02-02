@@ -103,6 +103,7 @@ pub fn main() !void {
     var progress = std.Progress{};
     try start.bufPrint(&date_buf);
     var prog_root = progress.start(&date_buf, n_days);
+    prog_root.setUnit(" days");
     progress.refresh();
 
     var thread_pool: std.Thread.Pool = undefined;
@@ -120,6 +121,7 @@ pub fn main() !void {
         prog_root.setName(&date_buf);
 
         try downloader.download(&date_buf);
+        prog_root.completeOne();
     }
     prog_root.end();
 }
