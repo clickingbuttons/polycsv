@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const clap = @import("clap");
 const Polygon = @import("./polygon.zig");
 const time = @import("./time.zig");
 const Downloader = @import("./downloader.zig");
@@ -57,17 +58,9 @@ fn panic(comptime format: []const u8, args: anytype) void {
     noreturn;
 }
 
-fn readAll(allocator: Allocator, fname: []const u8) ![]const u8 {
-    const file = try std.fs.cwd().openFile(fname, .{});
-    defer file.close();
-
-    return try file.reader().readAllAlloc(allocator, 1 << 32);
-}
-
 fn testTickers(allocator: Allocator) !TickerSet {
     var res = TickerSet.init(allocator);
-    const test_tickers = try readAll(allocator, "test_tickers.txt");
-    defer allocator.free(test_tickers);
+    const test_tickers = @embedFile("./test_tickers.txt");
 
     var iter = std.mem.splitScalar(u8, test_tickers, ',');
     while (iter.next()) |t| {
@@ -78,6 +71,29 @@ fn testTickers(allocator: Allocator) !TickerSet {
 }
 
 pub fn main() !void {
+    const start_default = "2003-09-10";
+    const params = comptime clap.parseParamsComptime(
+        \\-h, --help         Display this help and exit.
+        \\-s, --start <str>  Date to start on (YYYY-mm-dd). Inclusive. Defaults to 2003-09-10.
+        \\-e, --end   <str>  Date to end on (YYYY-mm-dd). Exclusive. Defaults to when program is run in UTC.
+        \\
+    );
+    const stderr = std.io.getStdErr();
+    var diag = clap.Diagnostic{};
+    var parsed = clap.parse(
+        clap.Help,
+        &params,
+        clap.parsers.default,
+        .{ .diagnostic = &diag },
+    ) catch |err| {
+        diag.report(stderr.writer(), err) catch {};
+        return err;
+    };
+    defer parsed.deinit();
+
+    const args = parsed.args;
+    if (args.help != 0) return clap.help(stderr.writer(), clap.Help, &params, .{});
+
     log_file = try std.fs.cwd().createFile("log.txt", .{});
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -87,10 +103,10 @@ pub fn main() !void {
     var test_tickers = try testTickers(allocator);
     defer test_tickers.deinit();
 
-    const start = time.Date{ .year = 2003, .month = .sep, .day = 10 };
+    const start = try time.Date.parse(args.start orelse start_default);
     // Will cover (start, end)
     // const end = time.Date.now();
-    const end = time.Date{ .year = 2003, .month = .oct, .day = 10 };
+    const end = if (args.end) |e| try time.Date.parse(e) else time.Date.now();
 
     var day = start;
     var date_buf = [_]u8{0} ** 10;
@@ -103,7 +119,7 @@ pub fn main() !void {
     var progress = std.Progress{};
     try start.bufPrint(&date_buf);
     var prog_root = progress.start(&date_buf, n_days);
-    prog_root.setUnit(" days");
+    prog_root.setUnit(" weekdays");
     progress.refresh();
 
     var thread_pool: std.Thread.Pool = undefined;
@@ -127,6 +143,5 @@ pub fn main() !void {
 }
 
 test {
-    _ = @import("./csv.zig");
     _ = @import("./time.zig");
 }

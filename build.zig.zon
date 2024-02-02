@@ -1,0 +1,11 @@
+.{
+	.name = "polycsv",
+	.version = "0.0.1",
+
+	.dependencies = .{
+		.@"zig-clap" = .{
+			.url = "https://github.com/Hejsil/zig-clap/archive/34e068756e69e7ee51ba6f27eb9036e19984a128.tar.gz",
+			.hash = "12206795542ab1c19251aac74db20dda4c2abf3289597dd02d52b1d70175064fb298",
+		},
+	},
+}
