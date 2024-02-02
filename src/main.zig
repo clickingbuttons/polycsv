@@ -21,6 +21,25 @@ pub fn myLogFn(
 ) void {
     _ = scope;
     var writer = log_file.writer();
+
+    const secs = @divTrunc(std.time.milliTimestamp(), 1000);
+    const epoch_seconds = std.time.epoch.EpochSeconds{ .secs = @intCast(secs) };
+
+    writer.writeByte('[') catch return;
+
+    const epoch_day = epoch_seconds.getEpochDay();
+    const epoch_year = epoch_day.calculateYearDay();
+    const epoch_month = epoch_year.calculateMonthDay();
+    writer.print("{d:0>4}-{d:0>2}-{d:0>2}", .{ epoch_year.year, epoch_month.month.numeric(), epoch_month.day_index + 1 }) catch return;
+
+    const epoch_time = epoch_seconds.getDaySeconds();
+    const hour = epoch_time.getHoursIntoDay();
+    const minute = epoch_time.getMinutesIntoHour();
+    const second = epoch_time.getSecondsIntoMinute();
+    writer.print("T{d:0>2}:{d:0>2}:{d:0>2}Z", .{ hour, minute, second }) catch return;
+
+    writer.writeByte(']') catch return;
+
     writer.writeAll("[" ++ comptime message_level.asText() ++ "] ") catch return;
     writer.print(format, args) catch return;
     writer.writeByte('\n') catch return;
@@ -64,7 +83,7 @@ pub fn main() !void {
 
     const start = time.Date{ .year = 2003, .month = .sep, .day = 10 };
     // Will cover (start, end)
-   // const end = time.Date.now();
+    // const end = time.Date.now();
     const end = time.Date{ .year = 2003, .month = .oct, .day = 10 };
 
     var day = start;

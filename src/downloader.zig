@@ -41,16 +41,12 @@ pub fn download(self: *Self, day: []const u8) !void {
         var lines = std.mem.splitScalar(u8, csv, '\n');
         if (lines.next()) |header| {
             if (!std.mem.startsWith(u8, header, "T")) {
-                log.err("grouped daily csv header {s}", .{ header });
+                log.err("unexpected grouped daily csv header {s} on {s}", .{ header, day });
                 return error.InvalidCsvHeader;
             }
-            var i: usize = 0;
-            while (lines.next()) |l| : (i += 1) {
+            while (lines.next()) |l| {
                 var fields = std.mem.splitScalar(u8, l, ',');
-                if (fields.next()) |first| {
-                    try res.put(first, {});
-                }
-                if (i == 0) break;
+                if (fields.next()) |first| try res.put(first, {});
             }
         }
 
@@ -63,9 +59,9 @@ pub fn download(self: *Self, day: []const u8) !void {
     try self.downloadTickers(day, tickers);
 }
 
-fn downloadTickers(self: *Self, date: []const u8, tickers: TickerSet)  !void {
+fn downloadTickers(self: *Self, date: []const u8, tickers: TickerSet) !void {
     const allocator = self.allocator;
-    const path = try std.fmt.allocPrint(allocator, "tickers/{s}.csv", .{ date });
+    const path = try std.fmt.allocPrint(allocator, "tickers/{s}.csv", .{date});
     defer allocator.free(path);
 
     var out = try std.fs.cwd().createFile(path, .{});
@@ -88,7 +84,7 @@ fn downloadTickers(self: *Self, date: []const u8, tickers: TickerSet)  !void {
     }
     self.wait_group.wait();
 
-   prog.end();
+    prog.end();
 }
 
 fn downloadTickerWorker(
@@ -106,7 +102,7 @@ fn downloadTickerWorker(
     }
 
     var details = self.client.tickerDetails(ticker, date) catch |err| {
-        log.err("{}", .{ err });
+        log.err("error getting details for {s}: {}", .{ ticker, err });
         return;
     };
     defer allocator.free(details);
@@ -114,8 +110,8 @@ fn downloadTickerWorker(
     if (std.mem.indexOfScalar(u8, details, '\n')) |first_newline| {
         self.mutex.lock();
         defer self.mutex.unlock();
-        out.writer().writeAll(details[first_newline + 1..]) catch |err| {
-            log.err("{}", .{ err });
+        out.writer().writeAll(details[first_newline + 1 ..]) catch |err| {
+            log.err("{}", .{err});
             return;
         };
     }
