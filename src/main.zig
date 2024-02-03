@@ -10,6 +10,7 @@ const http = std.http;
 const TickerSet = Downloader.TickerSet;
 
 var log_file: std.fs.File = undefined;
+var log_mutex = std.Thread.Mutex{};
 
 pub const std_options = struct {
     pub const logFn = myLogFn;
@@ -27,6 +28,8 @@ pub fn myLogFn(
     args: anytype,
 ) void {
     _ = scope;
+    log_mutex.lock();
+    defer log_mutex.unlock();
     var writer = log_file.writer();
 
     const secs = @divTrunc(std.time.milliTimestamp(), 1000);
@@ -73,9 +76,10 @@ fn testTickers(allocator: Allocator) !TickerSet {
 pub fn main() !void {
     const start_default = "2003-09-10";
     const params = comptime clap.parseParamsComptime(
-        \\-h, --help         Display this help and exit.
-        \\-s, --start <str>  Date to start on (YYYY-mm-dd). Inclusive. Defaults to 2003-09-10.
-        \\-e, --end   <str>  Date to end on (YYYY-mm-dd). Exclusive. Defaults to when program is run in UTC.
+        \\-h, --help            Display this help and exit.
+        \\-s, --start    <str>  Date to start on (YYYY-mm-dd). Inclusive. Defaults to 2003-09-10.
+        \\-e, --end      <str>  Date to end on (YYYY-mm-dd). Exclusive. Defaults to when program is run in UTC.
+        \\-t, --threads  <u32>  Number of threads.
         \\
     );
     const stderr = std.io.getStdErr();
@@ -123,7 +127,7 @@ pub fn main() !void {
     progress.refresh();
 
     var thread_pool: std.Thread.Pool = undefined;
-    try thread_pool.init(.{ .allocator = allocator });
+    try thread_pool.init(.{ .allocator = allocator, .n_jobs = args.threads });
     defer thread_pool.deinit();
 
     var downloader = try Downloader.init(allocator, &thread_pool, prog_root);

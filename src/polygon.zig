@@ -36,34 +36,57 @@ fn get(self: *Self, uriString: []const u8, sink: anytype) !void {
     const allocator = self.client.allocator;
     const uri = try std.Uri.parse(uriString);
 
-    var request = try self.client.request(.GET, uri, self.headers, .{});
-    defer request.deinit();
+    const max_tries: usize = 5;
+    var n_tries: usize = 0;
+    while (n_tries < max_tries) : ({
+        n_tries += 1;
+        std.time.sleep(n_tries * n_tries * std.time.ns_per_s);
+    }) {
+        var request = self.client.request(.GET, uri, self.headers, .{}) catch |err| {
+            std.log.warn("try {d}/{d} requesting {s}: {}", .{ n_tries, max_tries, uriString, err });
+            continue;
+        };
+        defer request.deinit();
 
-    try request.start();
-    try request.wait();
+        request.start() catch |err| {
+            std.log.warn("try {d}/{d} starting {s}: {}", .{ n_tries, max_tries, uriString, err });
+            continue;
+        };
+        request.wait() catch |err| {
+            std.log.warn("try {d}/{d} waiting {s}: {}", .{ n_tries, max_tries, uriString, err });
+            continue;
+        };
 
-    if (request.response.status == .not_found) return;
-    if (request.response.status != .ok) return error.RateLimit;
+        switch (request.response.status) {
+            .ok => {
+                //{
+                //    var fifo = std.fifo.LinearFifo(u8, .{ .Static = 4096 }).init();
+                //    defer fifo.deinit();
+                //    try fifo.pump(request.reader(), sink);
+                //}
 
-    //{
-    //    var fifo = std.fifo.LinearFifo(u8, .{ .Static = 4096 }).init();
-    //    defer fifo.deinit();
-    //    try fifo.pump(request.reader(), sink);
-    //}
+                // instead of efficiently piping the request (which makes for hard parsing that has to lock)
+                // just send a whole CSV at a time
+                {
+                    const csv = try request.reader().readAllAlloc(allocator, 1 << 32);
+                    defer allocator.free(csv);
+                    try sink.writeAll(csv);
+                }
 
-    // instead of efficiently piping the request (which makes for hard parsing that has to lock)
-    // just send a whole CSV at a time
-    {
-        const csv = try request.reader().readAllAlloc(allocator, 1 << 32);
-        defer allocator.free(csv);
-        try sink.writeAll(csv);
-    }
-
-    if (request.response.headers.getFirstValue("link")) |l| {
-        if (std.mem.indexOfScalar(u8, l, '>')) |end| {
-            if (end == 0) return;
-            const next_url = l[1..end];
-            try self.get(next_url, sink);
+                if (request.response.headers.getFirstValue("link")) |l| {
+                    if (std.mem.indexOfScalar(u8, l, '>')) |end| {
+                        if (end == 0) return;
+                        const next_url = l[1..end];
+                        try self.get(next_url, sink);
+                    }
+                }
+                return;
+            },
+            .not_found => return,
+            else => {
+                std.log.warn("bad response from {s}: {}", .{uriString, request.response.status});
+                return error.BadResponse;
+            }
         }
     }
 }
