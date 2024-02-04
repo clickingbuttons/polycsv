@@ -5,6 +5,7 @@ pub const TickerSet = std.StringHashMap(void);
 const log = std.log;
 const Allocator = std.mem.Allocator;
 const FileWriter = std.io.BufferedWriter(4096, std.fs.File.Writer).Writer;
+const TickerDetails = Polygon.TickerDetails;
 
 allocator: Allocator,
 client: Polygon,
@@ -33,22 +34,14 @@ pub fn deinit(self: *Self) void {
 pub fn download(self: *Self, date: []const u8) !void {
     const allocator = self.allocator;
 
-    const csv = try self.client.groupedDaily(date);
-    defer allocator.free(csv);
+    var grouped = try self.client.groupedDaily(date);
+    defer grouped.deinit();
 
     var tickers: TickerSet = brk: {
         var res = TickerSet.init(allocator);
 
-        var lines = std.mem.splitScalar(u8, csv, '\n');
-        if (lines.next()) |header| {
-            if (!std.mem.startsWith(u8, header, "T")) {
-                log.err("unexpected grouped daily csv header {s} on {s}", .{ header, date });
-                return error.InvalidCsvHeader;
-            }
-            while (lines.next()) |l| {
-                var fields = std.mem.splitScalar(u8, l, ',');
-                try res.put(fields.first(), {});
-            }
+        if (grouped.value) |v| {
+            for (v) |t| try res.put(t.T, {});
         }
 
         break :brk res;
@@ -79,9 +72,9 @@ fn columnIndex(columns: []const u8, column: []const u8) ?usize {
     return null;
 }
 
-fn openFile(self: *Self, dir: []const u8, date: []const u8) !std.fs.File {
+fn createFile(self: *Self, dir: []const u8, date: []const u8) !std.fs.File {
     const allocator = self.allocator;
-    const path = try std.fmt.allocPrint(allocator, "{s}/{s}.csv", .{dir,date});
+    const path = try std.fmt.allocPrint(allocator, "{s}/{s}.csv", .{ dir, date });
     defer allocator.free(path);
 
     try std.fs.cwd().makePath(dir);
@@ -96,7 +89,7 @@ fn downloadTickers(self: *Self, date: []const u8, tickers: TickerSet) !TickerSet
     prog.setUnit(" tickers");
     prog.activate();
 
-    var out = try self.openFile("tickers", date);
+    var out = try self.createFile("tickers", date);
     defer out.close();
 
     var buffered = std.io.bufferedWriter(out.writer());
@@ -104,16 +97,11 @@ fn downloadTickers(self: *Self, date: []const u8, tickers: TickerSet) !TickerSet
 
     var res = TickerSet.init(allocator);
 
-    const sample = try self.client.tickerDetails("AAPL", "");
-    defer allocator.free(sample);
-
-    var lines = std.mem.splitScalar(u8, sample, '\n');
-    const expected_columns = lines.first();
-
-    const is_test_i = columnIndex(expected_columns, "is_test");
-    if (is_test_i == null) log.warn("no ticker details test column", .{});
-
-    try writer.print("{s}\n", .{ expected_columns });
+    const fields = std.meta.fields(TickerDetails);
+    inline for (fields, 0..) |f, i| {
+        try writer.writeAll(f.name);
+        try writer.writeByte(if (i == fields.len - 1) '\n' else ',');
+    }
 
     self.wait_group.reset();
     var keys = tickers.keyIterator();
@@ -124,8 +112,6 @@ fn downloadTickers(self: *Self, date: []const u8, tickers: TickerSet) !TickerSet
             &writer,
             date,
             t.*,
-            expected_columns,
-            is_test_i,
             &res,
             &prog,
         });
@@ -139,60 +125,64 @@ fn downloadTickers(self: *Self, date: []const u8, tickers: TickerSet) !TickerSet
     return res;
 }
 
+fn writeValue(
+    writer: *FileWriter,
+    value: anytype,
+) !void {
+    switch (@typeInfo(@TypeOf(value))) {
+        .Bool => try writer.writeAll(if (value) "true" else "false"),
+        .Int, .Float => try writer.print("{d}", .{value}),
+        .Optional => {
+            if (value != null) try writeValue(writer, value.?);
+        },
+        .Pointer => |p| switch (p.size) {
+            .Slice => {
+                if (p.child != u8) @compileError("unsupported slice type " ++ @typeName(p.child));
+                if (value.len == 0) return;
+                const has_comma = std.mem.indexOfScalar(u8, value, ',') != null;
+                if (has_comma) try writer.writeByte('"');
+                try writer.writeAll(value);
+                if (has_comma) try writer.writeByte('"');
+            },
+            else => |t| @compileError("unsupported pointer type " ++ @tagName(t)),
+        },
+        else => |t| @compileError("cannot serialize" ++ @typeName(t)),
+    }
+}
+
 fn downloadTickerWorker(
     self: *Self,
     writer: *FileWriter,
     date: []const u8,
     ticker: []const u8,
-    expected_header: []const u8,
-    is_test_i: ?usize,
     test_tickers: *TickerSet,
     prog: *std.Progress.Node,
 ) void {
-    const allocator = self.allocator;
-
     defer {
         self.wait_group.finish();
         prog.completeOne();
     }
 
-    var csv = self.client.tickerDetails(ticker, date) catch |err| {
-        log.err("error getting details for {s}: {}", .{ ticker, err });
-        return;
+    var details = self.client.tickerDetails(ticker, date) catch |err| {
+        log.err("error getting ticker details for {s}: {}", .{ ticker, err });
+        unreachable;
     };
-    defer allocator.free(csv);
+    defer details.deinit();
 
-    if (csv.len == 0) return; // 404
+    if (details.value == null) return; // 404
 
-    var lines = std.mem.splitScalar(u8, csv, '\n');
-
-    if (!std.mem.startsWith(u8, lines.first(), expected_header)) {
-        log.err("unexpected header for {s}: {s}", .{ ticker, csv });
+    if (details.value.?.is_test) {
+        test_tickers.put(ticker, {}) catch unreachable;
         return;
     }
+    self.mutex.lock();
+    defer self.mutex.unlock();
 
-    if (lines.next()) |data| {
-        if (data.len == 0) return; // empty response
-        self.mutex.lock();
-        defer self.mutex.unlock();
-
-        if (is_test_i) |i| {
-            var fields = std.mem.splitScalar(u8, data, ',');
-            var test_field: ?[]const u8 = null;
-            for (0..i) |_| test_field = fields.next();
-            if (test_field) |t| {
-                if (std.mem.eql(u8, t, "true")) test_tickers.put(ticker, {}) catch |err| {
-                    log.err("{}", .{err});
-                    return;
-                };
-            } else {
-                log.err("expected test field at index {d} since header matched", .{i});
-            }
-        }
-        writer.print("{s}\n", .{ data }) catch |err| {
-            log.err("{}", .{err});
-            return;
-        };
+    const fields = std.meta.fields(TickerDetails);
+    inline for (fields, 0..) |f, i| {
+        const value = @field(details.value.?, f.name);
+        writeValue(writer, value) catch unreachable;
+        writer.writeByte(if (i == fields.len - 1) '\n' else ',') catch unreachable;
     }
 }
 
@@ -204,20 +194,20 @@ fn downloadTrades(self: *Self, date: []const u8, tickers: TickerSet) !void {
     prog.setUnit(" tickers");
     prog.activate();
 
-    var out = try self.openFile("trades", date);
+    var out = try self.createFile("trades", date);
     defer out.close();
 
     var buffered = std.io.bufferedWriter(out.writer());
     var writer: FileWriter = buffered.writer();
 
-    var sample  = std.ArrayListUnmanaged(u8){};
+    var sample = std.ArrayListUnmanaged(u8){};
     defer sample.deinit(allocator);
     try self.client.trades("ASD", "2003-09-10", sample.writer(allocator));
 
     var lines = std.mem.splitScalar(u8, sample.items, '\n');
     const expected_columns = lines.first();
 
-    try writer.print("ticker,{s}\n", .{ expected_columns });
+    try writer.print("ticker,{s}\n", .{expected_columns});
 
     self.wait_group.reset();
     var keys = tickers.keyIterator();
@@ -277,15 +267,15 @@ fn downloadTradesWorker(
         prog.completeOne();
     }
 
-    var sink = TradesSink{
+    const sink = TradesSink{
         .header = expected_header,
-       .out  = writer,
-       .ticker = ticker,
-       .mutex = &self.mutex
+        .out = writer,
+        .ticker = ticker,
+        .mutex = &self.mutex,
     };
 
     self.client.trades(ticker, date, sink) catch |err| {
-        log.err("error getting details for {s}: {}", .{ ticker, err });
-        return;
+        log.err("error getting trades for {s}: {}", .{ ticker, err });
+        unreachable;
     };
 }

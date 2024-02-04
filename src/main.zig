@@ -75,11 +75,12 @@ fn testTickers(allocator: Allocator) !TickerSet {
 
 pub fn main() !void {
     const start_default = "2003-09-10";
+    const threads_default = 200;
     const params = comptime clap.parseParamsComptime(
         \\-h, --help            Display this help and exit.
         \\-s, --start    <str>  Date to start on (YYYY-mm-dd). Inclusive. Defaults to 2003-09-10.
         \\-e, --end      <str>  Date to end on (YYYY-mm-dd). Exclusive. Defaults to when program is run in UTC.
-        \\-t, --threads  <u32>  Number of threads.
+        \\-t, --threads  <u32>  Number of threads. Defaults to 200.
         \\
     );
     const stderr = std.io.getStdErr();
@@ -127,7 +128,7 @@ pub fn main() !void {
     progress.refresh();
 
     var thread_pool: std.Thread.Pool = undefined;
-    try thread_pool.init(.{ .allocator = allocator, .n_jobs = args.threads });
+    try thread_pool.init(.{ .allocator = allocator, .n_jobs = args.threads orelse threads_default });
     defer thread_pool.deinit();
 
     var downloader = try Downloader.init(allocator, &thread_pool, prog_root);
