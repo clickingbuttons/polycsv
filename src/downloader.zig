@@ -51,6 +51,8 @@ pub fn download(self: *Self, date: []const u8) !void {
 
     log.info("{s} {d}", .{ date, tickers.unmanaged.size });
 
+    if (tickers.unmanaged.size == 0) return;
+
     var new_test_tickers = try self.downloadTickers(date, tickers);
     defer new_test_tickers.deinit();
 
