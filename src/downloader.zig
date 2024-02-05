@@ -4,7 +4,8 @@ const Polygon = @import("./polygon.zig");
 pub const TickerSet = std.StringHashMap(void);
 const log = std.log;
 const Allocator = std.mem.Allocator;
-const FileWriter = std.io.BufferedWriter(4096, std.fs.File.Writer).Writer;
+const gzip = std.compress.gzip;
+const FileWriter = gzip.Compress(std.fs.File.Writer).Writer;
 const TickerDetails = Polygon.TickerDetails;
 
 allocator: Allocator,
@@ -74,7 +75,7 @@ fn columnIndex(columns: []const u8, column: []const u8) ?usize {
 
 fn createFile(self: *Self, dir: []const u8, date: []const u8) !std.fs.File {
     const allocator = self.allocator;
-    const path = try std.fmt.allocPrint(allocator, "{s}/{s}.csv", .{ dir, date });
+    const path = try std.fmt.allocPrint(allocator, "{s}/{s}.csv.gz", .{ dir, date });
     defer allocator.free(path);
 
     try std.fs.cwd().makePath(dir);
@@ -92,8 +93,8 @@ fn downloadTickers(self: *Self, date: []const u8, tickers: TickerSet) !TickerSet
     var out = try self.createFile("tickers", date);
     defer out.close();
 
-    var buffered = std.io.bufferedWriter(out.writer());
-    var writer: FileWriter = buffered.writer();
+    var gzipped = try gzip.compress(allocator, out.writer(), .{});
+    var writer: FileWriter = gzipped.writer();
 
     var res = TickerSet.init(allocator);
 
@@ -118,7 +119,7 @@ fn downloadTickers(self: *Self, date: []const u8, tickers: TickerSet) !TickerSet
     }
     self.wait_group.wait();
 
-    try buffered.flush();
+    try gzipped.close();
     prog.end();
     if (prog.parent) |p| p.setCompletedItems(p.unprotected_completed_items - 1);
 
@@ -197,8 +198,8 @@ fn downloadTrades(self: *Self, date: []const u8, tickers: TickerSet) !void {
     var out = try self.createFile("trades", date);
     defer out.close();
 
-    var buffered = std.io.bufferedWriter(out.writer());
-    var writer: FileWriter = buffered.writer();
+    var gzipped = try gzip.compress(allocator, out.writer(), .{});
+    var writer: FileWriter = gzipped.writer();
 
     var sample = std.ArrayListUnmanaged(u8){};
     defer sample.deinit(allocator);
@@ -224,7 +225,7 @@ fn downloadTrades(self: *Self, date: []const u8, tickers: TickerSet) !void {
     }
     self.wait_group.wait();
 
-    try buffered.flush();
+    try gzipped.close();
     prog.end();
     if (prog.parent) |p| p.setCompletedItems(p.unprotected_completed_items - 1);
 }
