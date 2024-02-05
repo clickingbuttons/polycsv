@@ -83,13 +83,18 @@ pub fn main() !void {
         \\-t, --threads  <u32>  Number of threads. Defaults to 200.
         \\
     );
+
     const stderr = std.io.getStdErr();
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer std.debug.assert(gpa.deinit() == .ok);
+    const allocator = gpa.allocator();
+
     var diag = clap.Diagnostic{};
     var parsed = clap.parse(
         clap.Help,
         &params,
         clap.parsers.default,
-        .{ .diagnostic = &diag },
+        .{ .allocator = allocator, .diagnostic = &diag },
     ) catch |err| {
         diag.report(stderr.writer(), err) catch {};
         return err;
@@ -100,10 +105,6 @@ pub fn main() !void {
     if (args.help != 0) return clap.help(stderr.writer(), clap.Help, &params, .{});
 
     log_file = try std.fs.cwd().createFile("log.txt", .{});
-
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer std.debug.assert(gpa.deinit() == .ok);
-    const allocator = gpa.allocator();
 
     var test_tickers = try testTickers(allocator);
     defer test_tickers.deinit();

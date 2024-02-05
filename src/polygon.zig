@@ -45,13 +45,13 @@ fn fetch(self: *Self, uriString: []const u8, accept: []const u8, sink: anytype) 
         n_tries += 1;
         std.time.sleep(n_tries * n_tries * std.time.ns_per_s);
     }) {
-        var request = self.client.request(.GET, uri, headers, .{}) catch |err| {
+        var request = self.client.open(.GET, uri, headers, .{}) catch |err| {
             std.log.warn("try {d}/{d} requesting {s}: {}", .{ n_tries, max_tries, uriString, err });
             continue;
         };
         defer request.deinit();
 
-        request.start() catch |err| {
+        request.send(.{}) catch |err| {
             std.log.warn("try {d}/{d} starting {s}: {}", .{ n_tries, max_tries, uriString, err });
             continue;
         };
@@ -126,7 +126,7 @@ fn fetchJson(self: *Self, comptime T: type, uri: []const u8) !Parsed(T) {
     errdefer allocator.free(json);
 
     if (json.len == 0) {
-        var res = Parsed(T){
+        const res = Parsed(T){
             .arena = try allocator.create(ArenaAllocator),
             .json = json,
         };
