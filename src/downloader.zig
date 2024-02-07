@@ -205,9 +205,10 @@ fn downloadTrades(self: *Self, date: []const u8, tickers: TickerSet) !void {
 
     var sample = std.ArrayListUnmanaged(u8){};
     defer sample.deinit(allocator);
-    try self.client.trades("ASD", "2003-09-10", sample.writer(allocator));
 
+    try self.client.trades("A", date, sample.writer(allocator));
     var lines = std.mem.splitScalar(u8, sample.items, '\n');
+    // conditions,correction,exchange,id,participant_timestamp,price,sequence_number,sip_timestamp,size,tape,trf_id,trf_timestamp
     const expected_columns = lines.first();
 
     try writer.print("ticker,{s}\n", .{expected_columns});
