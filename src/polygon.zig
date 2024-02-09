@@ -46,17 +46,17 @@ fn fetch(self: *Self, uriString: []const u8, accept: []const u8, sink: anytype) 
         std.time.sleep(n_tries * n_tries * std.time.ns_per_s);
     }) {
         var request = self.client.open(.GET, uri, headers, .{}) catch |err| {
-            std.log.warn("try {d}/{d} requesting {s}: {}", .{ n_tries, max_tries, uriString, err });
+            std.log.warn("retry {d}/{d} {s}: {}", .{ n_tries + 1, max_tries, uriString, err });
             continue;
         };
         defer request.deinit();
 
         request.send(.{}) catch |err| {
-            std.log.warn("try {d}/{d} starting {s}: {}", .{ n_tries, max_tries, uriString, err });
+            std.log.warn("retry {d}/{d} {s}: {}", .{ n_tries + 1, max_tries, uriString, err });
             continue;
         };
         request.wait() catch |err| {
-            std.log.warn("try {d}/{d} waiting {s}: {}", .{ n_tries, max_tries, uriString, err });
+            std.log.warn("retry {d}/{d} {s}: {}", .{ n_tries + 1, max_tries, uriString, err });
             continue;
         };
 
