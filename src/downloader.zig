@@ -14,10 +14,16 @@ progress: *std.Progress.Node,
 thread_pool: *std.Thread.Pool,
 wait_group: std.Thread.WaitGroup = .{},
 mutex: std.Thread.Mutex = .{},
+outdir: []const u8,
 
 const Self = @This();
 
-pub fn init(allocator: Allocator, thread_pool: *std.Thread.Pool, progress: *std.Progress.Node) !Self {
+pub fn init(
+    allocator: Allocator,
+    thread_pool: *std.Thread.Pool,
+    progress: *std.Progress.Node,
+    outdir: []const u8,
+) !Self {
     const client = try Polygon.init(allocator, null);
 
     return Self{
@@ -25,6 +31,7 @@ pub fn init(allocator: Allocator, thread_pool: *std.Thread.Pool, progress: *std.
         .client = client,
         .progress = progress,
         .thread_pool = thread_pool,
+        .outdir = outdir,
     };
 }
 
@@ -77,10 +84,12 @@ fn columnIndex(columns: []const u8, column: []const u8) ?usize {
 
 fn createFile(self: *Self, dir: []const u8, date: []const u8) !std.fs.File {
     const allocator = self.allocator;
-    const path = try std.fmt.allocPrint(allocator, "{s}/{s}.csv.gz", .{ dir, date });
+    const path = try std.fmt.allocPrint(allocator, "{s}/{s}/{s}.csv.gz", .{ self.outdir, dir, date });
     defer allocator.free(path);
 
-    try std.fs.cwd().makePath(dir);
+    const dirname = std.fs.path.dirname(path).?;
+    try std.fs.cwd().makePath(dirname);
+
     return try std.fs.cwd().createFile(path, .{});
 }
 

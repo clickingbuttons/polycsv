@@ -81,6 +81,7 @@ pub fn main() !void {
         \\-s, --start    <str>  Date to start on (YYYY-mm-dd). Inclusive. Defaults to 2003-09-10.
         \\-e, --end      <str>  Date to end on (YYYY-mm-dd). Exclusive. Defaults to when program is run in UTC.
         \\-t, --threads  <u32>  Number of threads. Defaults to 200.
+        \\-o, --outdir   <str>  Output directory. Defaults to cwd.
         \\
     );
 
@@ -132,7 +133,7 @@ pub fn main() !void {
     try thread_pool.init(.{ .allocator = allocator, .n_jobs = args.threads orelse threads_default });
     defer thread_pool.deinit();
 
-    var downloader = try Downloader.init(allocator, &thread_pool, prog_root);
+    var downloader = try Downloader.init(allocator, &thread_pool, prog_root, args.outdir orelse ".");
     defer downloader.deinit();
 
     day = start;

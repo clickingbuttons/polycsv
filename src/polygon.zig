@@ -60,8 +60,8 @@ fn fetch(self: *Self, uriString: []const u8, accept: []const u8, sink: anytype) 
             continue;
         };
 
-        switch (request.response.status) {
-            .ok => {
+        switch (@intFromEnum(request.response.status)) {
+            200 => {
                 //{
                 //    var fifo = std.fifo.LinearFifo(u8, .{ .Static = 4096 }).init();
                 //    defer fifo.deinit();
@@ -85,10 +85,15 @@ fn fetch(self: *Self, uriString: []const u8, accept: []const u8, sink: anytype) 
                 }
                 return;
             },
-            .not_found => return,
+            400...500 => |c| {
+                if (c == 404) return;
+
+                std.log.err("bad response from {s}: {}", .{ uriString, request.response.status });
+                return error.BadResponse;
+            },
             else => {
                 std.log.warn("bad response from {s}: {}", .{ uriString, request.response.status });
-                return error.BadResponse;
+                continue;
             },
         }
     }
