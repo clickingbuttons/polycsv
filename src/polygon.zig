@@ -198,8 +198,8 @@ pub const GroupedDaily = []struct { T: []const u8 };
 
 pub const TickerDetails = struct {
     ticker: []const u8,
-    name: []const u8,
     active: bool,
+    name: []const u8 = "",
     primary_exchange: []const u8 = "",
     type: []const u8 = "",
     is_test: bool = false,
