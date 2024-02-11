@@ -45,7 +45,8 @@ fn fetch(self: *Self, uriString: []const u8, accept: []const u8, sink: anytype) 
     var n_tries: usize = 0;
     while (n_tries < max_tries) : ({
         n_tries += 1;
-        std.time.sleep(n_tries * n_tries * std.time.ns_per_s);
+        const sleep_s: usize = @min(n_tries * n_tries, 60);
+        std.time.sleep(sleep_s * std.time.ns_per_s);
     }) {
         var request = self.client.open(.GET, uri, headers, .{}) catch |err| {
             std.log.warn("retry {d}/{d} {s}: {}", .{ n_tries + 1, max_tries, uriString, err });
