@@ -23,8 +23,9 @@ pub fn init(
     thread_pool: *std.Thread.Pool,
     progress: *std.Progress.Node,
     outdir: []const u8,
+    max_retries: usize,
 ) !Self {
-    const client = try Polygon.init(allocator, null);
+    const client = try Polygon.init(allocator, max_retries, null);
 
     return Self{
         .allocator = allocator,

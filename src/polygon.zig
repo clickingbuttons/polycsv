@@ -11,8 +11,9 @@ const Self = @This();
 
 client: http.Client,
 token: []const u8,
+max_retries: usize,
 
-pub fn init(allocator: Allocator, apiKey: ?[]const u8) !Self {
+pub fn init(allocator: Allocator, max_retries: usize, apiKey: ?[]const u8) !Self {
     var env = try std.process.getEnvMap(allocator);
     defer env.deinit();
     const key = apiKey orelse env.get(key_var) orelse return error.NoApiKey;
@@ -21,6 +22,7 @@ pub fn init(allocator: Allocator, apiKey: ?[]const u8) !Self {
     return Self{
         .client = http.Client{ .allocator = allocator },
         .token = token,
+        .max_retries = max_retries,
     };
 }
 
@@ -39,7 +41,7 @@ fn fetch(self: *Self, uriString: []const u8, accept: []const u8, sink: anytype) 
     try headers.append("Accept", accept);
     defer headers.deinit();
 
-    const max_tries: usize = 5;
+    const max_tries = self.max_retries;
     var n_tries: usize = 0;
     while (n_tries < max_tries) : ({
         n_tries += 1;

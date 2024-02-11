@@ -76,12 +76,14 @@ fn testTickers(allocator: Allocator) !TickerSet {
 pub fn main() !void {
     const start_default = "2003-09-10";
     const threads_default = 200;
+    const max_retries_default: usize = 10;
     const params = comptime clap.parseParamsComptime(
-        \\-h, --help            Display this help and exit.
-        \\-s, --start    <str>  Date to start on (YYYY-mm-dd). Inclusive. Defaults to 2003-09-10.
-        \\-e, --end      <str>  Date to end on (YYYY-mm-dd). Exclusive. Defaults to when program is run in UTC.
-        \\-t, --threads  <u32>  Number of threads. Defaults to 200.
-        \\-o, --outdir   <str>  Output directory. Defaults to cwd.
+        \\-h, --help                  Display this help and exit.
+        \\-s, --start        <str>    Date to start on (YYYY-mm-dd). Inclusive. Defaults to 2003-09-10.
+        \\-e, --end          <str>    Date to end on (YYYY-mm-dd). Exclusive. Defaults to when program is run in UTC.
+        \\-t, --threads      <u32>    Number of threads. Defaults to 200.
+        \\-o, --outdir       <str>    Output directory. Defaults to cwd.
+        \\-r, --max-retries  <usize>  Maximum number of times to retry any given HTTP request before exiting. Defaults to 10.
         \\
     );
 
@@ -130,10 +132,19 @@ pub fn main() !void {
     progress.refresh();
 
     var thread_pool: std.Thread.Pool = undefined;
-    try thread_pool.init(.{ .allocator = allocator, .n_jobs = args.threads orelse threads_default });
+    try thread_pool.init(.{
+        .allocator = allocator,
+        .n_jobs = args.threads orelse threads_default,
+    });
     defer thread_pool.deinit();
 
-    var downloader = try Downloader.init(allocator, &thread_pool, prog_root, args.outdir orelse ".");
+    var downloader = try Downloader.init(
+        allocator,
+        &thread_pool,
+        prog_root,
+        args.outdir orelse ".",
+        args.@"max-retries" orelse max_retries_default,
+    );
     defer downloader.deinit();
 
     day = start;
