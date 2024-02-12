@@ -60,6 +60,10 @@ fn fetch(self: *Self, uriString: []const u8, accept: []const u8, sink: anytype) 
         };
         request.wait() catch |err| {
             std.log.warn("wait retry {d}/{d} {s}: {}", .{ n_tries + 1, max_tries, uriString, err });
+            // There's some bug in zig's connection pool...
+            self.client.connection_pool.deinit(allocator);
+            self.client.connection_pool = .{};
+            request.connection = null;
             continue;
         };
 
