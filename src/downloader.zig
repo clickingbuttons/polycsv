@@ -25,7 +25,7 @@ pub fn init(
     outdir: []const u8,
     max_retries: usize,
 ) !Self {
-    const client = try Polygon.init(allocator, max_retries, null);
+    const client = try Polygon.init(allocator, max_retries, thread_pool.threads.len, null);
 
     return Self{
         .allocator = allocator,
