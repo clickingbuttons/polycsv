@@ -44,22 +44,22 @@ fn fetch(self: *Self, uriString: []const u8, accept: []const u8, sink: anytype) 
     const max_tries = self.max_retries;
     var n_tries: usize = 0;
     while (n_tries < max_tries) : ({
-        n_tries += 1;
         const sleep_s: usize = @min(n_tries * n_tries, 60);
         std.time.sleep(sleep_s * std.time.ns_per_s);
+        n_tries += 1;
     }) {
         var request = self.client.open(.GET, uri, headers, .{}) catch |err| {
-            std.log.warn("retry {d}/{d} {s}: {}", .{ n_tries + 1, max_tries, uriString, err });
+            std.log.warn("request retry {d}/{d} {s}: {}", .{ n_tries + 1, max_tries, uriString, err });
             continue;
         };
         defer request.deinit();
 
         request.send(.{}) catch |err| {
-            std.log.warn("retry {d}/{d} {s}: {}", .{ n_tries + 1, max_tries, uriString, err });
+            std.log.warn("send retry {d}/{d} {s}: {}", .{ n_tries + 1, max_tries, uriString, err });
             continue;
         };
         request.wait() catch |err| {
-            std.log.warn("retry {d}/{d} {s}: {}", .{ n_tries + 1, max_tries, uriString, err });
+            std.log.warn("wait retry {d}/{d} {s}: {}", .{ n_tries + 1, max_tries, uriString, err });
             continue;
         };
 
