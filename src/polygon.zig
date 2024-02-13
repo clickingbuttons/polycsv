@@ -42,24 +42,33 @@ fn fetch(self: *Self, uriString: []const u8, accept: []const u8, sink: anytype) 
 
     const max_tries = self.max_retries;
     var n_tries: usize = 0;
-    while (n_tries < max_tries) : ({
-        // const sleep_s: usize = @min(n_tries * n_tries, 60);
-        const sleep_s: usize = 1;
+    var retry_immediately = false;
+
+    while (n_tries <= max_tries) : ({
+        const sleep_s: usize = if (retry_immediately) 0 else @min(n_tries * n_tries, 60);
+        if (retry_immediately) {
+            retry_immediately = false;
+        } else {
+            n_tries += 1;
+        }
         std.time.sleep(sleep_s * std.time.ns_per_s);
-        n_tries += 1;
     }) {
         var request = self.client.open(.GET, uri, headers, .{}) catch |err| {
-            std.log.warn("request retry {d}/{d} {s}: {}", .{ n_tries + 1, max_tries, uriString, err });
+            std.log.warn("open {d}/{d} {s}: {}", .{ n_tries, max_tries, uriString, err });
             continue;
         };
         defer request.deinit();
 
         request.send(.{}) catch |err| {
-            std.log.warn("send retry {d}/{d} {s}: {}", .{ n_tries + 1, max_tries, uriString, err });
+            std.log.warn("send {d}/{d} {s}: {}", .{ n_tries, max_tries, uriString, err });
             continue;
         };
         request.wait() catch |err| {
-            std.log.warn("wait retry {d}/{d} {s}: {}", .{ n_tries + 1, max_tries, uriString, err });
+            std.log.warn("wait {d}/{d} {s}: {}", .{ n_tries, max_tries, uriString, err });
+            // From the std.http.Client author:
+            // > EndOfStream means the peer closed the connection, and std.http kept trying to read from it (primarily because the only way to know this is try to read from it); std.http doesn't handle this case very well at the moment, as it currently expects the server to hold a connection open forever (which is generally a safe assumption in a single-shot or burst of requests).
+            // > Assuming you're dealing with non-malicious servers, it should be reasonably safe to treat any EndOfStream as an ignorable error and not count it towards a retry limit
+            if (err == error.EndOfStream) retry_immediately = true;
             continue;
         };
 
