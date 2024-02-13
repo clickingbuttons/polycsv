@@ -106,6 +106,7 @@ fn downloadTickers(self: *Self, date: []const u8, tickers: TickerSet) !TickerSet
     defer out.close();
 
     var gzipped = try gzip.compress(allocator, out.writer(), .{});
+    defer gzipped.deinit();
     var writer: FileWriter = gzipped.writer();
 
     var res = TickerSet.init(allocator);
@@ -211,6 +212,7 @@ fn downloadTrades(self: *Self, date: []const u8, tickers: TickerSet) !void {
     defer out.close();
 
     var gzipped = try gzip.compress(allocator, out.writer(), .{});
+    defer gzipped.deinit();
     var writer: FileWriter = gzipped.writer();
 
     var sample = std.ArrayListUnmanaged(u8){};
