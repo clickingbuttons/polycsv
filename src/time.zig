@@ -88,8 +88,53 @@ pub const Date = struct {
     }
 };
 
+pub const DateIterator = struct {
+    start: Date,
+    end: Date,
+    skip_weekends: bool,
+    cur: ?Date = null,
+
+    const Self = @This();
+
+    pub fn init(start: Date, end: Date, skip_weekends: bool) Self {
+        return Self{
+            .start = start,
+            .end = end,
+            .skip_weekends = skip_weekends,
+            .cur = start,
+        };
+    }
+
+    pub fn next(self: *Self) ?Date {
+        var res = self.cur;
+
+        if (self.cur) |*c| {
+            if (std.meta.eql(c.*, self.end)) {
+                self.cur = null;
+                res = self.end;
+            } else {
+                res = c.*;
+                c.increment();
+                if (self.skip_weekends) {
+                    while (c.isWeekend()) c.increment();
+                }
+            }
+        }
+
+        return res;
+    }
+
+    pub fn reset(self: *Self) void {
+        self.cur = self.start;
+    }
+};
+
+fn makeDate(year: epoch.Year, month: epoch.Month, day: u8) Date {
+    return Date{ .year = year, .month = month, .day = day };
+}
+
 fn testWeekday(year: epoch.Year, month: epoch.Month, day: u8, expected: Weekday) !void {
-    const date = Date{ .year = year, .month = month, .day = day };
+    const date = makeDate(year, month, day);
     try std.testing.expectEqual(expected, date.weekday());
 }
 
@@ -99,4 +144,23 @@ test "weekday" {
     try testWeekday(2024, .feb, 1, Weekday.Thursday);
     try testWeekday(2024, .feb, 3, Weekday.Saturday);
     try testWeekday(2024, .feb, 4, Weekday.Sunday);
+}
+
+test "iterator 1 day" {
+    const start = makeDate(2003, @enumFromInt(9), 10);
+    const end = makeDate(2003, @enumFromInt(9), 10);
+
+    var iter = DateIterator.init(start, end, false);
+    try std.testing.expectEqual(start, iter.next());
+    try std.testing.expectEqual(@as(?Date, null), iter.next());
+}
+
+test "iterator 2 days skip weekend" {
+    const start = makeDate(2003, @enumFromInt(9), 12);
+    const end = makeDate(2003, @enumFromInt(9), 15);
+
+    var iter = DateIterator.init(start, end, true);
+    try std.testing.expectEqual(start, iter.next());
+    try std.testing.expectEqual(end, iter.next());
+    try std.testing.expectEqual(@as(?Date, null), iter.next());
 }

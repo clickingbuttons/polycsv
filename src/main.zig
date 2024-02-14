@@ -79,8 +79,8 @@ pub fn main() !void {
     const max_retries_default: usize = 10;
     const params = comptime clap.parseParamsComptime(
         \\-h, --help                  Display this help and exit.
-        \\-s, --start        <str>    Date to start on (YYYY-mm-dd). Inclusive. Defaults to 2003-09-10.
-        \\-e, --end          <str>    Date to end on (YYYY-mm-dd). Exclusive. Defaults to when program is run in UTC.
+        \\-s, --start        <str>    Date to start on (YYYY-mm-dd). Defaults to 2003-09-10.
+        \\-e, --end          <str>    Date to end on (YYYY-mm-dd). Defaults to when program is run in UTC.
         \\-t, --threads      <u32>    Number of threads. Defaults to 200.
         \\-o, --outdir       <str>    Output directory. Defaults to cwd.
         \\-r, --max-retries  <usize>  Maximum number of times to retry any given HTTP request before exiting. Defaults to 10.
@@ -113,17 +113,14 @@ pub fn main() !void {
     defer test_tickers.deinit();
 
     const start = try time.Date.parse(args.start orelse start_default);
-    // Will cover (start, end)
-    // const end = time.Date.now();
     const end = if (args.end) |e| try time.Date.parse(e) else time.Date.now();
 
-    var day = start;
     var date_buf = [_]u8{0} ** 10;
+    var iter = time.DateIterator.init(start, end, true);
+
     var n_days: usize = 0;
-    while (!std.meta.eql(day, end)) : (day.increment()) {
-        if (day.isWeekend()) continue;
-        n_days += 1;
-    }
+    while (iter.next()) |_| n_days += 1;
+    iter.reset();
 
     var progress = std.Progress{};
     try start.bufPrint(&date_buf);
@@ -147,10 +144,7 @@ pub fn main() !void {
     );
     defer downloader.deinit();
 
-    day = start;
-    while (!std.meta.eql(day, end)) : (day.increment()) {
-        if (day.isWeekend()) continue;
-
+    while (iter.next()) |day| {
         try day.bufPrint(&date_buf);
         prog_root.setName(&date_buf);
 
