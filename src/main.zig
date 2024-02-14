@@ -84,6 +84,7 @@ pub fn main() !void {
         \\-t, --threads      <u32>    Number of threads. Defaults to 200.
         \\-o, --outdir       <str>    Output directory. Defaults to cwd.
         \\-r, --max-retries  <usize>  Maximum number of times to retry any given HTTP request before exiting. Defaults to 10.
+        \\--skip-trades               Skip downloading trades. Defaults to false.
         \\
     );
 
@@ -135,13 +136,7 @@ pub fn main() !void {
     });
     defer thread_pool.deinit();
 
-    var downloader = try Downloader.init(
-        allocator,
-        &thread_pool,
-        prog_root,
-        args.outdir orelse ".",
-        args.@"max-retries" orelse max_retries_default,
-    );
+    var downloader = try Downloader.init(allocator, &thread_pool, prog_root, args.outdir orelse ".", args.@"max-retries" orelse max_retries_default, args.@"skip-trades" != 0);
     defer downloader.deinit();
 
     while (iter.next()) |day| {

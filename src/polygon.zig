@@ -234,6 +234,13 @@ pub const TickerDetails = struct {
     composite_figi: []const u8 = "",
     share_class_figi: []const u8 = "",
     phone_number: []const u8 = "",
+    address: struct {
+        address1: []const u8 = "",
+        address2: []const u8 = "",
+        city: []const u8 = "",
+        state: []const u8 = "",
+        postal_code: []const u8 = "",
+    } = .{},
     description: []const u8 = "",
     sic_code: []const u8 = "",
     sic_description: []const u8 = "",

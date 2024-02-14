@@ -1,5 +1,6 @@
 const std = @import("std");
 const Polygon = @import("./polygon.zig");
+const csv_mod = @import("./CsvWriter.zig");
 
 pub const TickerSet = std.StringHashMap(void);
 const log = std.log;
@@ -15,6 +16,7 @@ thread_pool: *std.Thread.Pool,
 wait_group: std.Thread.WaitGroup = .{},
 mutex: std.Thread.Mutex = .{},
 outdir: []const u8,
+skip_trades: bool,
 
 const Self = @This();
 
@@ -24,6 +26,7 @@ pub fn init(
     progress: *std.Progress.Node,
     outdir: []const u8,
     max_retries: usize,
+    skip_trades: bool,
 ) !Self {
     const client = try Polygon.init(allocator, max_retries, thread_pool.threads.len, null);
 
@@ -33,6 +36,7 @@ pub fn init(
         .progress = progress,
         .thread_pool = thread_pool,
         .outdir = outdir,
+        .skip_trades = skip_trades,
     };
 }
 
@@ -70,7 +74,7 @@ pub fn download(self: *Self, date: []const u8) !void {
         _ = tickers.remove(t.*);
     }
 
-    try self.downloadTrades(date, tickers);
+    if (!self.skip_trades) try self.downloadTrades(date, tickers);
 }
 
 fn columnIndex(columns: []const u8, column: []const u8) ?usize {
@@ -107,15 +111,13 @@ fn downloadTickers(self: *Self, date: []const u8, tickers: TickerSet) !TickerSet
 
     var gzipped = try gzip.compress(allocator, out.writer(), .{});
     defer gzipped.deinit();
-    var writer: FileWriter = gzipped.writer();
+
+    const filed: FileWriter = gzipped.writer();
+
+    var writer = csv_mod.csvWriter(TickerDetails, filed);
+    try writer.writeHeader();
 
     var res = TickerSet.init(allocator);
-
-    const fields = std.meta.fields(TickerDetails);
-    inline for (fields, 0..) |f, i| {
-        try writer.writeAll(f.name);
-        try writer.writeByte(if (i == fields.len - 1) '\n' else ',');
-    }
 
     self.wait_group.reset();
     var keys = tickers.keyIterator();
@@ -139,34 +141,9 @@ fn downloadTickers(self: *Self, date: []const u8, tickers: TickerSet) !TickerSet
     return res;
 }
 
-fn writeValue(
-    writer: *FileWriter,
-    value: anytype,
-) !void {
-    switch (@typeInfo(@TypeOf(value))) {
-        .Bool => try writer.writeAll(if (value) "true" else "false"),
-        .Int, .Float => try writer.print("{d}", .{value}),
-        .Optional => {
-            if (value != null) try writeValue(writer, value.?);
-        },
-        .Pointer => |p| switch (p.size) {
-            .Slice => {
-                if (p.child != u8) @compileError("unsupported slice type " ++ @typeName(p.child));
-                if (value.len == 0) return;
-                const has_comma = std.mem.indexOfScalar(u8, value, ',') != null;
-                if (has_comma) try writer.writeByte('"');
-                try writer.writeAll(value);
-                if (has_comma) try writer.writeByte('"');
-            },
-            else => |t| @compileError("unsupported pointer type " ++ @tagName(t)),
-        },
-        else => |t| @compileError("cannot serialize" ++ @typeName(t)),
-    }
-}
-
 fn downloadTickerWorker(
     self: *Self,
-    writer: *FileWriter,
+    writer: *csv_mod.CsvWriter(TickerDetails, FileWriter),
     date: []const u8,
     ticker: []const u8,
     test_tickers: *TickerSet,
@@ -192,12 +169,7 @@ fn downloadTickerWorker(
     self.mutex.lock();
     defer self.mutex.unlock();
 
-    const fields = std.meta.fields(TickerDetails);
-    inline for (fields, 0..) |f, i| {
-        const value = @field(details.value.?, f.name);
-        writeValue(writer, value) catch unreachable;
-        writer.writeByte(if (i == fields.len - 1) '\n' else ',') catch unreachable;
-    }
+    writer.writeRecord(details.value.?) catch unreachable;
 }
 
 /// Caller owns returned TickerSet
