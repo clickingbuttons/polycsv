@@ -65,10 +65,25 @@ fn fetch(self: *Self, uriString: []const u8, accept: []const u8, sink: anytype) 
         };
         request.wait() catch |err| {
             std.log.warn("wait {d}/{d} {s}: {}", .{ n_tries, max_tries, uriString, err });
-            // From the std.http.Client author:
-            // > EndOfStream means the peer closed the connection, and std.http kept trying to read from it (primarily because the only way to know this is try to read from it); std.http doesn't handle this case very well at the moment, as it currently expects the server to hold a connection open forever (which is generally a safe assumption in a single-shot or burst of requests).
-            // > Assuming you're dealing with non-malicious servers, it should be reasonably safe to treat any EndOfStream as an ignorable error and not count it towards a retry limit
-            if (err == error.EndOfStream) retry_immediately = true;
+            switch (err) {
+                // From the std.http.Client author:
+                // > EndOfStream means the peer closed the connection, and std.http kept trying to
+                // > read from it (primarily because the only way to know this is try to read from it);
+                // > std.http doesn't handle this case very well at the moment,
+                // > as it currently expects the server to hold a connection open forever
+                // > (which is generally a safe assumption in a single-shot or burst of requests).
+                // > Assuming you're dealing with non-malicious servers, it should be reasonably safe
+                // to treat any EndOfStream as an ignorable error and not count it towards a retry limit
+                error.EndOfStream => retry_immediately = true,
+                // I have experienced `request.reader()`s hanging when other threads when seeing this.
+                // As a crude way to prevent this, reset all connections.
+                error.ConnectionResetByPeer => {
+                    const old_size = self.client.connection_pool.free_size;
+                    self.client.connection_pool.resize(allocator, 0);
+                    self.client.connection_pool.resize(allocator, old_size);
+                },
+                else => {},
+            }
             continue;
         };
 
