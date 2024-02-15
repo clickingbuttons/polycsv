@@ -76,14 +76,14 @@ fn testTickers(allocator: Allocator) !TickerSet {
 pub fn main() !void {
     const start_default = "2003-09-10";
     const threads_default = 200;
-    const max_retries_default: usize = 10;
+    const max_retries_default: usize = 60;
     const params = comptime clap.parseParamsComptime(
         \\-h, --help                  Display this help and exit.
         \\-s, --start        <str>    Date to start on (YYYY-mm-dd). Defaults to 2003-09-10.
         \\-e, --end          <str>    Date to end on (YYYY-mm-dd). Defaults to when program is run in UTC.
         \\-t, --threads      <u32>    Number of threads. Defaults to 200.
         \\-o, --outdir       <str>    Output directory. Defaults to cwd.
-        \\-r, --max-retries  <usize>  Maximum number of times to retry any given HTTP request before exiting. Defaults to 10.
+        \\-r, --max-retries  <usize>  Maximum number of times to retry any given HTTP request before exiting. Defaults to 60.
         \\--skip-trades               Skip downloading trades. Defaults to false.
         \\
     );

@@ -45,13 +45,16 @@ pub fn CsvWriter(comptime T: type, comptime WriterType: type) type {
         }
 
         fn writeValue(self: *Self, value: anytype) !void {
-            const ti = @typeInfo(@TypeOf(value));
+            var write_delim = true;
 
-            switch (ti) {
+            switch (@typeInfo(@TypeOf(value))) {
                 .Bool => try self.writer.writeAll(if (value) "true" else "false"),
                 .Int, .Float => try self.writer.print("{d}", .{value}),
                 .Optional => {
-                    if (value != null) try self.writeValue(value.?);
+                    if (value != null) {
+                        try self.writeValue(value.?);
+                        write_delim = false;
+                    }
                 },
                 .Pointer => |p| switch (p.size) {
                     .Slice => {
@@ -79,16 +82,14 @@ pub fn CsvWriter(comptime T: type, comptime WriterType: type) type {
                     inline for (s.fields) |f| {
                         try self.writeValue(@field(value, f.name));
                     }
+                    write_delim = false;
                 },
                 else => |t| @compileError("cannot serialize" ++ @typeName(t)),
             }
 
-            switch (ti) {
-                .Optional, .Struct => {},
-                else => {
-                    self.field_i += 1;
-                    if (self.field_i != n_fields) try self.writer.writeByte(self.field_delim);
-                },
+            if (write_delim) {
+                self.field_i += 1;
+                if (self.field_i != n_fields) try self.writer.writeByte(self.field_delim);
             }
         }
 
@@ -102,4 +103,34 @@ pub fn CsvWriter(comptime T: type, comptime WriterType: type) type {
 
 pub fn csvWriter(comptime T: type, child_writer: anytype) CsvWriter(T, @TypeOf(child_writer)) {
     return CsvWriter(T, @TypeOf(child_writer)){ .writer = child_writer };
+}
+
+test "nested struct with optionals" {
+    const T = struct {
+        ticker: []const u8,
+        address: struct {
+            address1: []const u8,
+            address2: []const u8,
+        },
+        shares_outstanding: ?usize,
+        description: []const u8,
+    };
+    const t = T{ .ticker = "AAPL", .address = .{
+        .address1 = "ONE APPLE PARK WAY",
+        .address2 = "TWO APPLE PARK WAY",
+    }, .shares_outstanding = null, .description = "crapple" };
+
+    const allocator = std.testing.allocator;
+    var list = std.ArrayList(u8).init(allocator);
+    defer list.deinit();
+
+    var writer = csvWriter(T, list.writer());
+    try writer.writeHeader();
+    try writer.writeRecord(t);
+
+    const expected =
+        \\ticker,address1,address2,shares_outstanding,description
+        \\AAPL,ONE APPLE PARK WAY,TWO APPLE PARK WAY,,crapple
+    ;
+    try std.testing.expectEqualStrings(expected, list.items);
 }
