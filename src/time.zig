@@ -11,6 +11,10 @@ pub const Weekday = enum(u3) {
     Saturday,
 };
 
+pub fn parseDate(comptime buf: []const u8) Date {
+    return Date.parse(buf) catch @panic(buf ++ " must have format YYYY-mm-dd");
+}
+
 pub const Date = struct {
     year: epoch.Year,
     month: epoch.Month,
@@ -85,6 +89,14 @@ pub const Date = struct {
     pub fn isWeekend(self: Self) bool {
         const w = self.weekday();
         return w == .Saturday or w == .Sunday;
+    }
+
+    pub fn lt(self: Self, other: Self) bool {
+        return self.year < other.year or self.month.numeric() < other.month.numeric() or self.day < other.day;
+    }
+
+    pub fn gt(self: Self, other: Self) bool {
+        return self.year > other.year or self.month.numeric() > other.month.numeric() or self.day > other.day;
     }
 };
 

@@ -1,6 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const clap = @import("clap");
+const argparser = @import("argparser");
 const Polygon = @import("./polygon.zig");
 const time = @import("./time.zig");
 const Downloader = @import("./downloader.zig");
@@ -61,59 +61,65 @@ fn panic(comptime format: []const u8, args: anytype) void {
     noreturn;
 }
 
-fn testTickers(allocator: Allocator) !TickerSet {
-    var res = TickerSet.init(allocator);
-    const test_tickers = @embedFile("./test_tickers.txt");
-
-    var iter = std.mem.splitScalar(u8, test_tickers, ',');
-    while (iter.next()) |t| {
-        if (t.len > 0) try res.put(t, {});
-    }
-
-    return res;
-}
-
 pub fn main() !void {
-    const start_default = "2003-09-10";
-    const threads_default = 200;
-    const max_retries_default: usize = 60;
-    const params = comptime clap.parseParamsComptime(
-        \\-h, --help                  Display this help and exit.
-        \\-s, --start        <str>    Date to start on (YYYY-mm-dd). Defaults to 2003-09-10.
-        \\-e, --end          <str>    Date to end on (YYYY-mm-dd). Defaults to when program is run in UTC.
-        \\-t, --threads      <u32>    Number of threads. Defaults to 200.
-        \\-o, --outdir       <str>    Output directory. Defaults to cwd.
-        \\-r, --max-retries  <usize>  Maximum number of times to retry any given HTTP request before exiting. Defaults to 60.
-        \\--skip-trades               Skip downloading trades. Defaults to false.
-        \\
-    );
-
     const stderr = std.io.getStdErr();
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer std.debug.assert(gpa.deinit() == .ok);
     const allocator = gpa.allocator();
 
-    var diag = clap.Diagnostic{};
-    var parsed = clap.parse(
-        clap.Help,
-        &params,
-        clap.parsers.default,
-        .{ .allocator = allocator, .diagnostic = &diag },
-    ) catch |err| {
-        diag.report(stderr.writer(), err) catch {};
-        return err;
-    };
-    defer parsed.deinit();
+    var opt = try argparser.parse(allocator, struct {
+        help: bool = false,
+        @"help-test-tickers": bool = false,
+        start: []const u8 = "2003-09-10",
+        end: ?[]const u8,
+        threads: u32 = 300,
+        outdir: []const u8 = ".",
+        @"max-retries": usize = 60,
+        @"skip-trades": bool = false,
+        @"test-tickers": []const u8 = "test_tickers.txt",
+        @"log-file": []const u8 = "log.txt",
 
-    const args = parsed.args;
-    if (args.help != 0) return clap.help(stderr.writer(), clap.Help, &params, .{});
+        pub const __shorts__ = .{
+            .start = .s,
+            .end = .e,
+            .threads = .t,
+            .outdir = .o,
+            .@"max-retries" = .r,
+        };
 
-    log_file = try std.fs.cwd().createFile("log.txt", .{});
+        pub const __messages__ = .{
+            .end = "Defaults to today in UTC.",
+            .@"test-tickers" = "See help-test-tickers. ",
+        };
+    }, null, null);
+    defer opt.deinit();
 
-    var test_tickers = try testTickers(allocator);
-    defer test_tickers.deinit();
+    const args = opt.args;
 
-    const start = try time.Date.parse(args.start orelse start_default);
+    if (args.help) {
+        try opt.print_help(stderr.writer());
+        return;
+    } else if (args.@"help-test-tickers") {
+        try stderr.writer().writeAll(
+            \\Polygon does not authoritatively define test tickers.
+            \\Exchanges publish lists and retain the rights to create new ones.
+            \\In order to not download these you can modify or make your own `test_tickers.txt`.
+            \\
+            \\It's a file with list of regexes, each on a newline.
+            \\Each has `^` prepended and `(CQS suffixes)?$` appended.
+            \\Comments start with `;`.
+            \\Kvs for the following line start with `;!` and have syntax `key=value`.
+            \\Supported optional kvs:
+            \\  - `start`: The date which this regex starts identifying a test ticker.
+            \\  - `end`: The date which this regex ends identifying a test ticker.
+            \\
+        );
+        return;
+    }
+
+    log_file = try std.fs.cwd().createFile(args.@"log-file", .{});
+
+    const start = try time.Date.parse(args.start);
     const end = if (args.end) |e| try time.Date.parse(e) else time.Date.now();
 
     var date_buf = [_]u8{0} ** 10;
@@ -130,13 +136,18 @@ pub fn main() !void {
     progress.refresh();
 
     var thread_pool: std.Thread.Pool = undefined;
-    try thread_pool.init(.{
-        .allocator = allocator,
-        .n_jobs = args.threads orelse threads_default,
-    });
+    try thread_pool.init(.{ .allocator = allocator, .n_jobs = args.threads });
     defer thread_pool.deinit();
 
-    var downloader = try Downloader.init(allocator, &thread_pool, prog_root, args.outdir orelse ".", args.@"max-retries" orelse max_retries_default, args.@"skip-trades" != 0);
+    var downloader = try Downloader.init(
+        allocator,
+        &thread_pool,
+        prog_root,
+        args.outdir,
+        args.@"max-retries",
+        args.@"skip-trades",
+        args.@"test-tickers",
+    );
     defer downloader.deinit();
 
     while (iter.next()) |day| {
@@ -151,4 +162,5 @@ pub fn main() !void {
 
 test {
     _ = @import("./time.zig");
+    _ = @import("./Regex.zig");
 }

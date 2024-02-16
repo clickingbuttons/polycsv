@@ -1,0 +1,27 @@
+; https://www.nasdaqtrader.com/Content/ProductsServices/TRADING/TRF-Chicago-Test-Securities.xlsx
+CBO
+CBX
+IBO
+IGZ
+ZBZX
+ZEXIT
+ZIEXT
+ZVV
+ZXIET
+; More than the spreadsheet listed A, B, C, V, W, X are used.
+Z[A-Z]ZZT
+ZVZZC
+ZWZZT
+ZXZZT
+
+; don't know where these came from but they're verified test tickers
+[A-Z][A-Z]ZST
+; keep in mind ZTSTF is a valid OTC
+ZTST
+ZZK
+ZZV
+;! end=2023-01-01
+ZZZ
+
+; Informal rule so far has been to not allow real tickers with "TEST" in their name.
+.*TEST.*

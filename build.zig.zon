@@ -3,9 +3,9 @@
 	.version = "0.0.1",
 
 	.dependencies = .{
-		.@"zig-clap" = .{
-			.url = "https://github.com/Hejsil/zig-clap/archive/4267b0b60ef6f87cccf3ee6ed481e6d0759180c6.tar.gz",
-			.hash = "12202fa30d679d821292bcd953458b9e76097a5d16999489125a206db63a53392833",
+		.@"argparser" = .{
+			.url = "https://github.com/jiacai2050/zigcli/archive/1e83260a431f696378ebad4bf72d25128fd26706.tar.gz",
+			.hash = "12202a9e207619ea538b0d60456391a4699864a432dfdad236bfd6cfc691663b67e8",
 		},
 	},
 	.paths = .{ "src " }

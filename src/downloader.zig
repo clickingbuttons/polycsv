@@ -1,6 +1,8 @@
 const std = @import("std");
 const Polygon = @import("./polygon.zig");
 const csv_mod = @import("./CsvWriter.zig");
+const TickerRegexes = @import("./Regex.zig").TickerRegexes;
+const time = @import("./time.zig");
 
 pub const TickerSet = std.StringHashMap(void);
 const log = std.log;
@@ -17,6 +19,7 @@ wait_group: std.Thread.WaitGroup = .{},
 mutex: std.Thread.Mutex = .{},
 outdir: []const u8,
 skip_trades: bool,
+ticker_regexes: TickerRegexes,
 
 const Self = @This();
 
@@ -27,6 +30,7 @@ pub fn init(
     outdir: []const u8,
     max_retries: usize,
     skip_trades: bool,
+    test_tickers_path: []const u8,
 ) !Self {
     const client = try Polygon.init(allocator, max_retries, thread_pool.threads.len, null);
 
@@ -37,42 +41,46 @@ pub fn init(
         .thread_pool = thread_pool,
         .outdir = outdir,
         .skip_trades = skip_trades,
+        .ticker_regexes = try TickerRegexes.init(allocator, test_tickers_path),
     };
 }
 
 pub fn deinit(self: *Self) void {
     self.client.deinit();
+    self.ticker_regexes.deinit();
 }
 
 pub fn download(self: *Self, date: []const u8) !void {
     const allocator = self.allocator;
+
+    log.info("{s}", .{ date });
 
     var grouped = try self.client.groupedDaily(date);
     defer grouped.deinit();
 
     var tickers: TickerSet = brk: {
         var res = TickerSet.init(allocator);
+        const parsed = try time.Date.parse(date);
 
         if (grouped.value) |v| {
-            for (v) |t| try res.put(t.T, {});
+            for (v) |t| {
+                if (self.ticker_regexes.matches(t.T, parsed)) {
+                    std.log.info("skipping test ticker {s}", .{ t.T });
+                } else {
+                    try res.put(t.T, {});
+                }
+            }
         }
 
         break :brk res;
     };
     defer tickers.deinit();
 
-    log.info("{s} {d}", .{ date, tickers.unmanaged.size });
+    log.info("{s} {d} tickers", .{ date, tickers.unmanaged.size });
 
     if (tickers.unmanaged.size == 0) return;
 
-    var new_test_tickers = try self.downloadTickers(date, tickers);
-    defer new_test_tickers.deinit();
-
-    var iter = new_test_tickers.keyIterator();
-    while (iter.next()) |t| {
-        log.info("new test ticker {s}", .{t.*});
-        _ = tickers.remove(t.*);
-    }
+    try self.downloadTickers(date, tickers);
 
     if (!self.skip_trades) try self.downloadTrades(date, tickers);
 }
@@ -99,7 +107,7 @@ fn createFile(self: *Self, dir: []const u8, date: []const u8) !std.fs.File {
 }
 
 /// Caller owns returned TickerSet
-fn downloadTickers(self: *Self, date: []const u8, tickers: TickerSet) !TickerSet {
+fn downloadTickers(self: *Self, date: []const u8, tickers: TickerSet) !void {
     const allocator = self.allocator;
 
     var prog = self.progress.start("ticker details", tickers.unmanaged.size);
@@ -117,8 +125,6 @@ fn downloadTickers(self: *Self, date: []const u8, tickers: TickerSet) !TickerSet
     var writer = csv_mod.csvWriter(TickerDetails, filed);
     try writer.writeHeader();
 
-    var res = TickerSet.init(allocator);
-
     self.wait_group.reset();
     var keys = tickers.keyIterator();
     while (keys.next()) |t| {
@@ -128,7 +134,6 @@ fn downloadTickers(self: *Self, date: []const u8, tickers: TickerSet) !TickerSet
             &writer,
             date,
             t.*,
-            &res,
             &prog,
         });
     }
@@ -137,8 +142,6 @@ fn downloadTickers(self: *Self, date: []const u8, tickers: TickerSet) !TickerSet
     try gzipped.close();
     prog.end();
     if (prog.parent) |p| p.setCompletedItems(p.unprotected_completed_items - 1);
-
-    return res;
 }
 
 fn downloadTickerWorker(
@@ -146,7 +149,6 @@ fn downloadTickerWorker(
     writer: *csv_mod.CsvWriter(TickerDetails, FileWriter),
     date: []const u8,
     ticker: []const u8,
-    test_tickers: *TickerSet,
     prog: *std.Progress.Node,
 ) void {
     defer {
@@ -160,16 +162,12 @@ fn downloadTickerWorker(
     };
     defer details.deinit();
 
-    if (details.value == null) return; // 404
+    if (details.value) |v| {
+        self.mutex.lock();
+        defer self.mutex.unlock();
 
-    if (details.value.?.is_test) {
-        test_tickers.put(ticker, {}) catch unreachable;
-        return;
+        writer.writeRecord(v) catch unreachable;
     }
-    self.mutex.lock();
-    defer self.mutex.unlock();
-
-    writer.writeRecord(details.value.?) catch unreachable;
 }
 
 /// Caller owns returned TickerSet

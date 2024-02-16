@@ -221,7 +221,7 @@ pub fn trades(self: *Self, ticker: []const u8, date: []const u8, sink: anytype) 
     return try self.fetch(uri, "text/csv", sink);
 }
 
-pub const GroupedDaily = []struct { T: []const u8 };
+pub const GroupedDaily = []struct { T: [:0]const u8 };
 
 pub const TickerDetails = struct {
     ticker: []const u8,
