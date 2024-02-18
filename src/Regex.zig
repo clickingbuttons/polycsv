@@ -62,20 +62,39 @@ const TickerRegex = struct {
 pub const TickerRegexes = struct {
     ticker_regexes: std.ArrayList(TickerRegex),
 
+    pub const description =
+            \\Polygon does not authoritatively define test tickers.
+            \\Exchanges publish lists and retain the rights to create new ones.
+            \\In order to not download these you can modify or make your own `test_tickers.txt`.
+            \\
+            \\It's a file with list of regexes, each on a newline.
+            \\Each has `^` prepended and `(CQS suffixes)?$` appended.
+            \\Comments start with `;`.
+            \\Kvs for the following line start with `;!` and have syntax `key=value`.
+            \\Supported optional kvs:
+            \\  - `start`: The date which this regex starts identifying a test ticker.
+            \\  - `end`: The date which this regex ends identifying a test ticker.
+            \\
+            ;
+
     const Self = @This();
 
     pub fn init(allocator: std.mem.Allocator, fname: []const u8) !Self {
-        const file = try std.fs.cwd().openFile(fname, .{});
+        var ticker_regexes = std.ArrayList(TickerRegex).init(allocator);
+        errdefer ticker_regexes.deinit();
+
+        const file = std.fs.cwd().openFile(fname, .{}) catch |err| {
+            std.log.warn("not using ticker regexes in {s}: {}", .{ fname, err });
+            return Self{ .ticker_regexes = ticker_regexes };
+        };
         defer file.close();
 
         var buf_reader = std.io.bufferedReader(file.reader());
         const reader = buf_reader.reader();
 
-        var ticker_regexes = std.ArrayList(TickerRegex).init(allocator);
-        errdefer ticker_regexes.deinit();
+
         var line = std.ArrayList(u8).init(allocator);
         defer line.deinit();
-
         const writer = line.writer();
 
         const default_start = time.parseDate("0000-01-01");
@@ -113,7 +132,7 @@ pub const TickerRegexes = struct {
             else => return err,
         }
 
-        std.log.info("parsed {d} regexes", .{ ticker_regexes.items.len });
+        std.log.info("parsed {d} regexes in {s}", .{ ticker_regexes.items.len, fname });
 
         return Self{ .ticker_regexes = ticker_regexes };
     }

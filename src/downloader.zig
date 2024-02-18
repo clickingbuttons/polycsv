@@ -8,7 +8,7 @@ pub const TickerSet = std.StringHashMap(void);
 const log = std.log;
 const Allocator = std.mem.Allocator;
 const gzip = std.compress.gzip;
-const FileWriter = gzip.Compress(std.fs.File.Writer).Writer;
+const FileWriter = gzip.Compressor(std.fs.File.Writer).Writer;
 const TickerDetails = Polygon.TickerDetails;
 
 allocator: Allocator,
@@ -108,8 +108,6 @@ fn createFile(self: *Self, dir: []const u8, date: []const u8) !std.fs.File {
 
 /// Caller owns returned TickerSet
 fn downloadTickers(self: *Self, date: []const u8, tickers: TickerSet) !void {
-    const allocator = self.allocator;
-
     var prog = self.progress.start("ticker details", tickers.unmanaged.size);
     prog.setUnit(" tickers");
     prog.activate();
@@ -117,8 +115,7 @@ fn downloadTickers(self: *Self, date: []const u8, tickers: TickerSet) !void {
     var out = try self.createFile("tickers", date);
     defer out.close();
 
-    var gzipped = try gzip.compress(allocator, out.writer(), .{});
-    defer gzipped.deinit();
+    var gzipped = try gzip.compressor(out.writer(), .{});
 
     const filed: FileWriter = gzipped.writer();
 
@@ -139,7 +136,7 @@ fn downloadTickers(self: *Self, date: []const u8, tickers: TickerSet) !void {
     }
     self.wait_group.wait();
 
-    try gzipped.close();
+    try gzipped.finish();
     prog.end();
     if (prog.parent) |p| p.setCompletedItems(p.unprotected_completed_items - 1);
 }
@@ -181,8 +178,7 @@ fn downloadTrades(self: *Self, date: []const u8, tickers: TickerSet) !void {
     var out = try self.createFile("trades", date);
     defer out.close();
 
-    var gzipped = try gzip.compress(allocator, out.writer(), .{});
-    defer gzipped.deinit();
+    var gzipped = try gzip.compressor(out.writer(), .{});
     var writer: FileWriter = gzipped.writer();
 
     var sample = std.ArrayListUnmanaged(u8){};
@@ -210,7 +206,7 @@ fn downloadTrades(self: *Self, date: []const u8, tickers: TickerSet) !void {
     }
     self.wait_group.wait();
 
-    try gzipped.close();
+    try gzipped.finish();
     prog.end();
     if (prog.parent) |p| p.setCompletedItems(p.unprotected_completed_items - 1);
 }

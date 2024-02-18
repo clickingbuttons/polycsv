@@ -127,9 +127,7 @@ pub const DateIterator = struct {
             } else {
                 res = c.*;
                 c.increment();
-                if (self.skip_weekends) {
-                    while (c.isWeekend()) c.increment();
-                }
+                if (self.skip_weekends and c.isWeekend()) return self.next();
             }
         }
 

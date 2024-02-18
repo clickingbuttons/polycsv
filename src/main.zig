@@ -4,6 +4,7 @@ const argparser = @import("argparser");
 const Polygon = @import("./polygon.zig");
 const time = @import("./time.zig");
 const Downloader = @import("./downloader.zig");
+const TickerRegexes = @import("./Regex.zig").TickerRegexes;
 
 const Allocator = std.mem.Allocator;
 const http = std.http;
@@ -12,13 +13,12 @@ const TickerSet = Downloader.TickerSet;
 var log_file: std.fs.File = undefined;
 var log_mutex = std.Thread.Mutex{};
 
-pub const std_options = struct {
-    pub const logFn = myLogFn;
-
-    pub const log_level: std.log.Level = switch (builtin.mode) {
+pub const std_options = std.Options {
+    .logFn = myLogFn,
+    .log_level = switch (builtin.mode) {
         .Debug => .debug,
         else => .info,
-    };
+    },
 };
 
 pub fn myLogFn(
@@ -53,12 +53,6 @@ pub fn myLogFn(
     writer.writeAll("[" ++ comptime message_level.asText() ++ "] ") catch return;
     writer.print(format, args) catch return;
     writer.writeByte('\n') catch return;
-}
-
-fn panic(comptime format: []const u8, args: anytype) void {
-    std.log.err(format, args);
-    std.process.exit(1);
-    noreturn;
 }
 
 pub fn main() !void {
@@ -100,20 +94,7 @@ pub fn main() !void {
         try opt.print_help(stderr.writer());
         return;
     } else if (args.@"help-test-tickers") {
-        try stderr.writer().writeAll(
-            \\Polygon does not authoritatively define test tickers.
-            \\Exchanges publish lists and retain the rights to create new ones.
-            \\In order to not download these you can modify or make your own `test_tickers.txt`.
-            \\
-            \\It's a file with list of regexes, each on a newline.
-            \\Each has `^` prepended and `(CQS suffixes)?$` appended.
-            \\Comments start with `;`.
-            \\Kvs for the following line start with `;!` and have syntax `key=value`.
-            \\Supported optional kvs:
-            \\  - `start`: The date which this regex starts identifying a test ticker.
-            \\  - `end`: The date which this regex ends identifying a test ticker.
-            \\
-        );
+        try stderr.writer().writeAll(TickerRegexes.description);
         return;
     }
 
