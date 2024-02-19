@@ -19,9 +19,7 @@ pub const Regex = struct {
             return error.compile;
         }
 
-        return .{
-            .inner = inner,
-        };
+        return Self{ .inner = inner };
     }
 
     fn deinit(self: Self) void {
@@ -37,16 +35,16 @@ pub const Regex = struct {
 
 const TickerRegex = struct {
     regex: Regex,
-    start: time.Date,
-    end: time.Date,
+    start: u64,
+    end: u64,
 
     const Self = @This();
 
     pub fn init(pattern: [:0]const u8, start: time.Date, end: time.Date) !Self {
         return Self{
             .regex = try Regex.init(pattern),
-            .start = start,
-            .end = end,
+            .start = start.epochSeconds(),
+            .end = end.epochSeconds(),
         };
     }
 
@@ -55,12 +53,14 @@ const TickerRegex = struct {
     }
 
     pub fn matches(self: Self, ticker: [:0]const u8, date: time.Date) bool {
-        return date.gt(self.start) and date.lt(self.end) and self.regex.matches(ticker);
+        const secs = date.epochSeconds();
+        return secs > self.start and secs < self.end and self.regex.matches(ticker);
     }
 };
 
 pub const TickerRegexes = struct {
     ticker_regexes: std.ArrayList(TickerRegex),
+    ticker_buf: [32]u8 = undefined,
 
     pub const description =
         \\Polygon does not authoritatively define test tickers.
@@ -96,7 +96,7 @@ pub const TickerRegexes = struct {
         defer line.deinit();
         const writer = line.writer();
 
-        const default_start = time.parseDate("0000-01-01");
+        const default_start = time.parseDate("1970-01-01");
         const default_end = time.parseDate("3000-01-01");
         var start = default_start;
         var end = default_end;
@@ -119,7 +119,7 @@ pub const TickerRegexes = struct {
                     }
                 }
             } else if (line.items.len > 0) {
-                const regex = try std.fmt.allocPrintZ(allocator, "^{s}({s})$", .{ line.items, ticker_suffix });
+                const regex = try std.fmt.allocPrintZ(allocator, "^{s}({s})?$", .{ line.items, ticker_suffix });
                 defer allocator.free(regex);
                 const ticker_regex = try TickerRegex.init(regex, start, end);
                 try ticker_regexes.append(ticker_regex);
@@ -141,19 +141,38 @@ pub const TickerRegexes = struct {
         self.ticker_regexes.deinit();
     }
 
-    pub fn matches(self: Self, ticker: [:0]const u8, date: time.Date) bool {
+    pub fn matches(self: *Self, ticker: []const u8, date: time.Date) bool {
+        std.mem.copyForwards(u8, &self.ticker_buf, ticker);
+        self.ticker_buf[ticker.len] = 0;
+        const ticker_z: [:0]const u8 = @ptrCast(self.ticker_buf[0..ticker.len]);
+
         for (self.ticker_regexes.items) |t| {
-            if (t.matches(ticker, date)) return true;
+            if (t.matches(ticker_z, date)) return true;
         }
 
         return false;
     }
 };
 
-test "basic" {
+test "regex basic" {
     const regex = try Regex.init("[ab]c");
     defer regex.deinit();
 
     try std.testing.expect(regex.matches("bc"));
     try std.testing.expect(!regex.matches("cc"));
+}
+
+test "regex tickers" {
+    const allocator = std.testing.allocator;
+    var regexes = try TickerRegexes.init(allocator, "test_tickers.txt");
+    defer regexes.deinit();
+
+    try std.testing.expect(regexes.matches("ZTST", time.parseDate("2010-09-10")));
+    try std.testing.expect(!regexes.matches("ZTS", time.parseDate("2010-09-10")));
+    try std.testing.expect(regexes.matches("CBO", time.parseDate("2020-09-10")));
+    try std.testing.expect(!regexes.matches("CBO", time.parseDate("2003-09-10")));
+    try std.testing.expect(!regexes.matches("CB", time.parseDate("2003-09-10")));
+    try std.testing.expect(regexes.matches("ZZZ", time.parseDate("2010-12-17")));
+    try std.testing.expect(!regexes.matches("ZZ", time.parseDate("2010-12-17")));
+    try std.testing.expect(!regexes.matches("ZZZ", time.parseDate("2023-12-17")));
 }

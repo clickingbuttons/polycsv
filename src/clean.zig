@@ -73,71 +73,71 @@ fn clean(allocator: Allocator, ticker_regexes: TickerRegexes, fname: []const u8)
     const new_fname = try std.fmt.allocPrint(allocator, "{s}.new", .{fname});
     defer allocator.free(new_fname);
 
-    var in_file = try std.fs.cwd().openFile(fname, .{});
-    defer in_file.close();
-
-    var in = gzip.decompressor(in_file.reader());
-
-    var out_file = try std.fs.cwd().createFile(new_fname, .{});
-    defer out_file.close();
-
-    var out = try gzip.compressor(out_file.writer(), .{});
-
-    var line = std.ArrayList(u8).init(allocator);
-    defer line.deinit();
-
-    var ticker_buf: [32:0]u8 = undefined;
-    var line_num: usize = 0;
+    var n_lines_filtered: usize = 0;
     var filtered = StringSet.init(allocator);
     defer filtered.deinit();
-    var n_lines_filtered: usize = 0;
+    {
+        var in_file = try std.fs.cwd().openFile(fname, .{});
+        defer in_file.close();
 
-    while (in.reader().streamUntilDelimiter(line.writer(), '\n', null)) : (line_num += 1) {
-        defer line.clearRetainingCapacity();
+        var in = gzip.decompressor(in_file.reader());
 
-        if (line_num == 0) {
-            try out.writer().writeAll(line.items);
-        } else {
-            var split = std.mem.splitScalar(u8, line.items, ',');
-            const ticker = split.first();
+        var out_file = try std.fs.cwd().createFile(new_fname, .{});
+        defer out_file.close();
 
-            std.mem.copyForwards(u8, &ticker_buf, ticker);
-            ticker_buf[ticker.len + 1] = 0;
+        var out = try gzip.compressor(out_file.writer(), .{});
 
-            if (ticker_regexes.matches(&ticker_buf, date)) {
-                try filtered.put(ticker);
-                n_lines_filtered += 1;
-            } else {
+        var line = std.ArrayList(u8).init(allocator);
+        defer line.deinit();
+
+        var line_num: usize = 0;
+
+        while (in.reader().streamUntilDelimiter(line.writer(), '\n', null)) : (line_num += 1) {
+            defer line.clearRetainingCapacity();
+
+            if (line_num == 0) {
                 try out.writer().writeAll(line.items);
                 try out.writer().writeByte('\n');
-            }
-        }
-    } else |err| switch (err) {
-        error.EndOfStream => {},
-        else => return err,
-    }
+            } else {
+                var split = std.mem.splitScalar(u8, line.items, ',');
+                const ticker = split.first();
 
-    try std.fs.cwd().rename(new_fname, fname);
+                if (ticker_regexes.matches(ticker, date)) {
+                    try filtered.put(ticker);
+                    n_lines_filtered += 1;
+                } else {
+                    try out.writer().writeAll(line.items);
+                    try out.writer().writeByte('\n');
+                }
+            }
+        } else |err| switch (err) {
+            error.EndOfStream => {},
+            else => return err,
+        }
+        try out.finish();
+    }
 
     std.debug.print("{s} filtered {d} lines for {d} tickers ", .{ fname, n_lines_filtered, filtered.set.size });
     var iter = filtered.set.keyIterator();
     while (iter.next()) |k| std.debug.print("{s} ", .{k.*});
     std.debug.print("\n", .{});
+
+    try std.fs.cwd().rename(new_fname, fname);
 }
 
 test "string set" {
     var s = StringSet.init(std.testing.allocator);
     defer s.deinit();
 
-    try s.put(@as([:0]const u8, "ZVZZT"));
-    try s.put(@as([:0]const u8, "ZWZZ"));
-    try s.put(@as([:0]const u8, "TESTA"));
-    try s.put(@as([:0]const u8, "ZXZZT"));
+    try s.put("ZVZZT");
+    try s.put("ZWZZ");
+    try s.put("TESTA");
+    try s.put("ZXZZT");
 
-    try s.put(@as([:0]const u8, "ZXZZT"));
-    try s.put(@as([:0]const u8, "TESTA"));
-    try s.put(@as([:0]const u8, "ZVZZT"));
-    try s.put(@as([:0]const u8, "ZWZZ"));
+    try s.put("ZXZZT");
+    try s.put("TESTA");
+    try s.put("ZVZZT");
+    try s.put("ZWZZ");
 
     var iter = s.set.keyIterator();
     try std.testing.expectEqualStrings("ZVZZT", iter.next().?.*);

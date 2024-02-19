@@ -91,12 +91,16 @@ pub const Date = struct {
         return w == .Saturday or w == .Sunday;
     }
 
-    pub fn lt(self: Self, other: Self) bool {
-        return self.year < other.year or self.month.numeric() < other.month.numeric() or self.day < other.day;
-    }
+    pub fn epochSeconds(self: Self) u64 {
+        var days: u64 = 0;
 
-    pub fn gt(self: Self, other: Self) bool {
-        return self.year > other.year or self.month.numeric() > other.month.numeric() or self.day > other.day;
+        for (epoch.epoch_year..self.year) |y| days += if (epoch.isLeapYear(@intCast(y))) 366 else 365;
+
+        const leap_kind: epoch.YearLeapKind = if (epoch.isLeapYear(self.year)) .leap else .not_leap;
+        for (1..self.month.numeric()) |m| days += epoch.getDaysInMonth(leap_kind, @enumFromInt(m));
+        days += self.day - 1;
+
+        return days * epoch.secs_per_day;
     }
 };
 

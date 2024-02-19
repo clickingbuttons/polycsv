@@ -87,7 +87,7 @@ pub fn main() !void {
             .@"test-tickers" = "See help-test-tickers. ",
             .@"skip-existing" = "If there is an existing tickers file, skip downloading that day. ",
         };
-    }, null, null);
+    }, "[YYYY-mm-dd]", null);
     defer opt.deinit();
 
     const args = opt.args;
@@ -108,14 +108,22 @@ pub fn main() !void {
     var date_buf = [_]u8{0} ** 10;
     var iter = time.DateIterator.init(start, end, true);
 
-    var n_days: usize = 0;
-    while (iter.next()) |_| n_days += 1;
-    iter.reset();
+    const use_range = opt.positional_args.items.len == 0;
+    const n_days: usize = brk: {
+        if (use_range) {
+            var res: usize = 0;
+            while (iter.next()) |_| res += 1;
+            iter.reset();
+            break :brk res;
+        }
+
+        break :brk opt.positional_args.items.len;
+    };
 
     var progress = std.Progress{};
     try start.bufPrint(&date_buf);
     var prog_root = progress.start(&date_buf, n_days);
-    prog_root.setUnit(" weekdays");
+    prog_root.setUnit(" days");
     progress.refresh();
 
     var thread_pool: std.Thread.Pool = undefined;
@@ -134,12 +142,21 @@ pub fn main() !void {
     );
     defer downloader.deinit();
 
-    while (iter.next()) |day| {
-        try day.bufPrint(&date_buf);
-        prog_root.setName(&date_buf);
+    if (use_range) {
+        while (iter.next()) |day| {
+            try day.bufPrint(&date_buf);
+            prog_root.setName(&date_buf);
 
-        try downloader.download(&date_buf);
-        prog_root.completeOne();
+            try downloader.download(&date_buf);
+            prog_root.completeOne();
+        }
+    } else {
+        for (opt.positional_args.items) |date| {
+            prog_root.setName(date);
+
+            try downloader.download(date);
+            prog_root.completeOne();
+        }
     }
     prog_root.end();
 }
