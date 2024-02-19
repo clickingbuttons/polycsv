@@ -37,7 +37,7 @@ pub fn main() !void {
     var ticker_regexes = try TickerRegexes.init(allocator, args.@"test-tickers");
     defer ticker_regexes.deinit();
 
-    for (opt.positional_args.items) |f| try clean(allocator, ticker_regexes, f);
+    for (opt.positional_args.items) |f| try clean(allocator, &ticker_regexes, f);
 }
 
 const StringSet = struct {
@@ -66,7 +66,7 @@ const StringSet = struct {
     }
 };
 
-fn clean(allocator: Allocator, ticker_regexes: TickerRegexes, fname: []const u8) !void {
+fn clean(allocator: Allocator, ticker_regexes: *TickerRegexes, fname: []const u8) !void {
     const basename = std.fs.path.basename(fname);
     const date = try time.Date.parse(basename);
 
