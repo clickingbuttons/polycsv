@@ -122,6 +122,6 @@ fn clean(allocator: Allocator, ticker_regexes: TickerRegexes, fname: []const u8)
 
     std.debug.print("{s} filtered {d} lines for {d} tickers ", .{ fname, n_lines_filtered, filtered.set.size });
     var iter = filtered.set.keyIterator();
-    while (iter.next()) |k| std.debug.print("{s} ", .{k});
+    while (iter.next()) |k| std.debug.print("{s} ", .{k.*});
     std.debug.print("\n", .{});
 }
