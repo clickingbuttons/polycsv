@@ -70,6 +70,7 @@ pub fn main() !void {
         outdir: []const u8 = ".",
         @"max-retries": usize = 60,
         @"skip-trades": bool = false,
+        @"skip-existing": bool = false,
         @"test-tickers": []const u8 = "test_tickers.txt",
         @"log-file": []const u8 = "log.txt",
 
@@ -84,6 +85,7 @@ pub fn main() !void {
         pub const __messages__ = .{
             .end = "Defaults to today in UTC.",
             .@"test-tickers" = "See help-test-tickers. ",
+            .@"skip-existing" = "If there is an existing tickers file, skip downloading that day. ",
         };
     }, null, null);
     defer opt.deinit();
@@ -128,6 +130,7 @@ pub fn main() !void {
         args.@"max-retries",
         args.@"skip-trades",
         args.@"test-tickers",
+        args.@"skip-existing",
     );
     defer downloader.deinit();
 

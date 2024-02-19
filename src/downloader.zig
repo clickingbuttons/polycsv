@@ -20,6 +20,7 @@ mutex: std.Thread.Mutex = .{},
 outdir: []const u8,
 skip_trades: bool,
 ticker_regexes: TickerRegexes,
+skip_existing: bool,
 
 const Self = @This();
 
@@ -31,6 +32,7 @@ pub fn init(
     max_retries: usize,
     skip_trades: bool,
     test_tickers_path: []const u8,
+    skip_existing: bool,
 ) !Self {
     const client = try Polygon.init(allocator, max_retries, thread_pool.threads.len, null);
 
@@ -42,6 +44,7 @@ pub fn init(
         .outdir = outdir,
         .skip_trades = skip_trades,
         .ticker_regexes = try TickerRegexes.init(allocator, test_tickers_path),
+        .skip_existing = skip_existing,
     };
 }
 
@@ -54,6 +57,15 @@ pub fn download(self: *Self, date: []const u8) !void {
     const allocator = self.allocator;
 
     log.info("{s}", .{date});
+
+    if (self.skip_existing) brk: {
+        const path = try std.fmt.allocPrint(allocator, "{s}/{s}/{s}.csv.gz", .{ self.outdir, "tickers", date });
+        defer allocator.free(path);
+
+        std.fs.cwd().access(path, .{}) catch break :brk;
+        log.info("skip-existing {s}", .{date});
+        return;
+    }
 
     var grouped = try self.client.groupedDaily(date);
     defer grouped.deinit();

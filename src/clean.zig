@@ -105,7 +105,7 @@ fn clean(allocator: Allocator, ticker_regexes: TickerRegexes, fname: []const u8)
             ticker_buf[ticker.len + 1] = 0;
 
             if (ticker_regexes.matches(&ticker_buf, date)) {
-                try filtered.put(&ticker_buf);
+                try filtered.put(ticker);
                 n_lines_filtered += 1;
             } else {
                 try out.writer().writeAll(line.items);

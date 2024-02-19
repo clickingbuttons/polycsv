@@ -127,7 +127,7 @@ pub const DateIterator = struct {
             } else {
                 res = c.*;
                 c.increment();
-                if (self.skip_weekends and c.isWeekend()) return self.next();
+                if (self.skip_weekends and res.?.isWeekend()) return self.next();
             }
         }
 
@@ -157,8 +157,8 @@ test "weekday" {
 }
 
 test "iterator 1 day" {
-    const start = makeDate(2003, @enumFromInt(9), 10);
-    const end = makeDate(2003, @enumFromInt(9), 10);
+    const start = makeDate(2003, .sep, 10);
+    const end = makeDate(2003, .sep, 10);
 
     var iter = DateIterator.init(start, end, false);
     try std.testing.expectEqual(start, iter.next());
@@ -166,8 +166,8 @@ test "iterator 1 day" {
 }
 
 test "iterator 2 days skip weekend" {
-    const start = makeDate(2003, @enumFromInt(9), 12);
-    const end = makeDate(2003, @enumFromInt(9), 15);
+    const start = makeDate(2003, .sep, 12);
+    const end = makeDate(2003, .sep, 15);
 
     var iter = DateIterator.init(start, end, true);
     try std.testing.expectEqual(start, iter.next());
