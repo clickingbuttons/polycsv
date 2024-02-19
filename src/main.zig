@@ -13,7 +13,7 @@ const TickerSet = Downloader.TickerSet;
 var log_file: std.fs.File = undefined;
 var log_mutex = std.Thread.Mutex{};
 
-pub const std_options = std.Options {
+pub const std_options = std.Options{
     .logFn = myLogFn,
     .log_level = switch (builtin.mode) {
         .Debug => .debug,

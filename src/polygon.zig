@@ -31,9 +31,9 @@ pub fn deinit(self: *Self) void {
     self.client.deinit();
 }
 
-fn fetch(self: *Self, uriString: []const u8, accept: []const u8, sink: anytype) !void {
+fn fetchInner(self: *Self, next_uri: []const u8, accept: []const u8, sink: anytype) !?[]const u8 {
     const allocator = self.client.allocator;
-    const uri = try std.Uri.parse(uriString);
+    const uri = try std.Uri.parse(next_uri);
 
     var headers = std.http.Headers{ .allocator = allocator };
     try headers.append("Authorization", self.token);
@@ -54,17 +54,17 @@ fn fetch(self: *Self, uriString: []const u8, accept: []const u8, sink: anytype) 
         std.time.sleep(sleep_s * std.time.ns_per_s);
     }) {
         var request = self.client.open(.GET, uri, headers, .{}) catch |err| {
-            std.log.warn("open {d}/{d} {s}: {}", .{ n_tries, max_tries, uriString, err });
+            std.log.warn("open {d}/{d} {s}: {}", .{ n_tries, max_tries, next_uri, err });
             continue;
         };
         defer request.deinit();
 
         request.send(.{}) catch |err| {
-            std.log.warn("send {d}/{d} {s}: {}", .{ n_tries, max_tries, uriString, err });
+            std.log.warn("send {d}/{d} {s}: {}", .{ n_tries, max_tries, next_uri, err });
             continue;
         };
         request.wait() catch |err| {
-            std.log.warn("wait {d}/{d} {s}: {}", .{ n_tries, max_tries, uriString, err });
+            std.log.warn("wait {d}/{d} {s}: {}", .{ n_tries, max_tries, next_uri, err });
             switch (err) {
                 // From the std.http.Client author:
                 // > EndOfStream means the peer closed the connection, and std.http kept trying to
@@ -105,33 +105,47 @@ fn fetch(self: *Self, uriString: []const u8, accept: []const u8, sink: anytype) 
 
                 if (request.response.headers.getFirstValue("link")) |l| {
                     if (std.mem.indexOfScalar(u8, l, '>')) |end| {
-                        if (end == 0) return;
-                        const next_url = l[1..end];
-                        try self.fetch(next_url, accept, sink);
+                        if (end == 0) return null;
+                        return try allocator.dupe(u8, l[1..end]);
                     }
                 }
-                return;
+                return null;
             },
             400...500 => |c| {
-                if (c == 404) return;
+                if (c == 404) return null;
 
-                std.log.err("bad response from {s}: {}", .{ uriString, request.response.status });
-                return error.BadResponse;
+                std.log.err("{} from '{s}'", .{ request.response.status, next_uri });
+                const data = try request.reader().readAllAlloc(allocator, 1 << 32);
+                defer allocator.free(data);
+                std.log.err("body {s}", .{data});
+                @panic("can't be making bad requests");
             },
             else => {
-                std.log.warn("bad response from {s}: {}", .{ uriString, request.response.status });
+                std.log.warn("{} from '{s}'", .{ request.response.status, next_uri });
                 continue;
             },
         }
     }
+
+    return null;
+}
+
+fn fetch(self: *Self, uri: []const u8, accept: []const u8, sink: anytype) !void {
+    const allocator = self.client.allocator;
+
+    var next_uri = try self.fetchInner(uri, accept, sink);
+    while (next_uri) |u| {
+        next_uri = try self.fetchInner(u, accept, sink);
+        allocator.free(u);
+    }
 }
 
 /// Caller owns returned slice
-fn getAlloc(self: *Self, uriString: []const u8, accept: []const u8) ![]const u8 {
+fn getAlloc(self: *Self, uri: []const u8, accept: []const u8) ![]const u8 {
     const allocator = self.client.allocator;
     var buf = std.ArrayListUnmanaged(u8){};
 
-    try self.fetch(uriString, accept, buf.writer(allocator));
+    try self.fetch(uri, accept, buf.writer(allocator));
 
     return try buf.toOwnedSlice(allocator);
 }

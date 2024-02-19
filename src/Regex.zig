@@ -63,19 +63,19 @@ pub const TickerRegexes = struct {
     ticker_regexes: std.ArrayList(TickerRegex),
 
     pub const description =
-            \\Polygon does not authoritatively define test tickers.
-            \\Exchanges publish lists and retain the rights to create new ones.
-            \\In order to not download these you can modify or make your own `test_tickers.txt`.
-            \\
-            \\It's a file with list of regexes, each on a newline.
-            \\Each has `^` prepended and `(CQS suffixes)?$` appended.
-            \\Comments start with `;`.
-            \\Kvs for the following line start with `;!` and have syntax `key=value`.
-            \\Supported optional kvs:
-            \\  - `start`: The date which this regex starts identifying a test ticker.
-            \\  - `end`: The date which this regex ends identifying a test ticker.
-            \\
-            ;
+        \\Polygon does not authoritatively define test tickers.
+        \\Exchanges publish lists and retain the rights to create new ones.
+        \\In order to not download these you can modify or make your own `test_tickers.txt`.
+        \\
+        \\It's a file with list of regexes, each on a newline.
+        \\Each has `^` prepended and `(CQS suffixes)?$` appended.
+        \\Comments start with `;`.
+        \\Kvs for the following line start with `;!` and have syntax `key=value`.
+        \\Supported optional kvs:
+        \\  - `start`: The date which this regex starts identifying a test ticker.
+        \\  - `end`: The date which this regex ends identifying a test ticker.
+        \\
+    ;
 
     const Self = @This();
 
@@ -91,7 +91,6 @@ pub const TickerRegexes = struct {
 
         var buf_reader = std.io.bufferedReader(file.reader());
         const reader = buf_reader.reader();
-
 
         var line = std.ArrayList(u8).init(allocator);
         defer line.deinit();

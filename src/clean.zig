@@ -44,7 +44,7 @@ fn clean(allocator: Allocator, ticker_regexes: TickerRegexes, fname: []const u8)
     const basename = std.fs.path.basename(fname);
     const date = try time.Date.parse(basename);
 
-    const new_fname = try std.fmt.allocPrint(allocator, "{s}.new", .{ fname });
+    const new_fname = try std.fmt.allocPrint(allocator, "{s}.new", .{fname});
     defer allocator.free(new_fname);
 
     var in_file = try std.fs.cwd().openFile(fname, .{});
@@ -78,8 +78,8 @@ fn clean(allocator: Allocator, ticker_regexes: TickerRegexes, fname: []const u8)
             if (ticker_regexes.matches(&ticker_buf, date)) {
                 n_filtered += 1;
             } else {
-               try  out.writer().writeAll(line.items);
-               try out.writer().writeByte('\n');
+                try out.writer().writeAll(line.items);
+                try out.writer().writeByte('\n');
             }
         }
     } else |err| switch (err) {
@@ -89,5 +89,5 @@ fn clean(allocator: Allocator, ticker_regexes: TickerRegexes, fname: []const u8)
 
     try std.fs.cwd().rename(new_fname, fname);
 
-    std.debug.print("filtered {d} lines\n", .{ n_filtered });
+    std.debug.print("filtered {d} lines\n", .{n_filtered});
 }

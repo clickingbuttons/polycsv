@@ -53,7 +53,7 @@ pub fn deinit(self: *Self) void {
 pub fn download(self: *Self, date: []const u8) !void {
     const allocator = self.allocator;
 
-    log.info("{s}", .{ date });
+    log.info("{s}", .{date});
 
     var grouped = try self.client.groupedDaily(date);
     defer grouped.deinit();
@@ -65,7 +65,7 @@ pub fn download(self: *Self, date: []const u8) !void {
         if (grouped.value) |v| {
             for (v) |t| {
                 if (self.ticker_regexes.matches(t.T, parsed)) {
-                    std.log.info("skipping test ticker {s}", .{ t.T });
+                    std.log.info("skipping test ticker {s}", .{t.T});
                 } else {
                     try res.put(t.T, {});
                 }
