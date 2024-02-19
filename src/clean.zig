@@ -2,7 +2,6 @@ const std = @import("std");
 const argparser = @import("argparser");
 const time = @import("./time.zig");
 const TickerRegexes = @import("./Regex.zig").TickerRegexes;
-const ticker_regexes_description = @import("./main.zig").ticker_regexes_description;
 
 const Allocator = std.mem.Allocator;
 const gzip = std.compress.gzip;
@@ -26,7 +25,7 @@ pub fn main() !void {
 
     const args = opt.args;
 
-    if (args.help) {
+    if (args.help or opt.positional_args.items.len == 0) {
         try opt.print_help(stderr.writer());
         return;
     } else if (args.@"help-test-tickers") {

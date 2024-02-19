@@ -19,8 +19,15 @@ pub fn init(allocator: Allocator, max_retries: usize, n_threads: usize, apiKey: 
     const key = apiKey orelse env.get(key_var) orelse return error.NoApiKey;
     const token = try std.fmt.allocPrint(allocator, "Bearer {s}", .{key});
 
+    var client = http.Client{
+        .allocator = allocator,
+        .connection_pool = .{ .free_size = n_threads },
+        .next_https_rescan_certs = false,
+    };
+    try client.ca_bundle.rescan(allocator);
+
     return Self{
-        .client = http.Client{ .allocator = allocator, .connection_pool = .{ .free_size = n_threads } },
+        .client = client,
         .token = token,
         .max_retries = max_retries,
     };

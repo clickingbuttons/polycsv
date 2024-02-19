@@ -3,10 +3,15 @@
 	.version = "0.0.1",
 
 	.dependencies = .{
-		.@"argparser" = .{
+		.argparser = .{
 			.url = "https://github.com/jiacai2050/zigcli/archive/1e83260a431f696378ebad4bf72d25128fd26706.tar.gz",
 			.hash = "12202a9e207619ea538b0d60456391a4699864a432dfdad236bfd6cfc691663b67e8",
 		},
 	},
-	.paths = .{ "src " }
+	.paths = .{
+		"src",
+		"build.zig",
+		"build.zig.zon",
+		"README.md"
+	}
 }
