@@ -43,7 +43,7 @@ pub fn main() !void {
 const StringSet = struct {
     allocator: std.mem.Allocator,
     set: std.StringHashMapUnmanaged(void) = .{},
-    pool: std.ArrayListUnmanaged(u8) = .{},
+    keys: std.ArrayListUnmanaged([]const u8) = .{},
 
     const Self = @This();
 
@@ -54,15 +54,16 @@ const StringSet = struct {
     pub fn deinit(self: *Self) void {
         const allocator = self.allocator;
         self.set.deinit(allocator);
-        self.pool.deinit(allocator);
+        for (self.keys.items) |k| allocator.free(k);
+        self.keys.deinit(allocator);
     }
 
     pub fn put(self: *Self, key: []const u8) !void {
         const allocator = self.allocator;
         if (self.set.get(key) == null) {
-            const len = self.pool.items.len;
-            try self.pool.appendSlice(allocator, key);
-            try self.set.put(allocator, self.pool.items[len..self.pool.items.len], {});
+            const owned = try allocator.dupe(u8, key);
+            try self.keys.append(allocator, owned);
+            try self.set.put(allocator, owned, {});
         }
     }
 };
