@@ -43,7 +43,6 @@ pub fn main() !void {
 const StringSet = struct {
     allocator: std.mem.Allocator,
     set: std.StringHashMapUnmanaged(void) = .{},
-    keys: std.ArrayListUnmanaged([]const u8) = .{},
 
     const Self = @This();
 
@@ -53,16 +52,15 @@ const StringSet = struct {
 
     pub fn deinit(self: *Self) void {
         const allocator = self.allocator;
+        var iter = self.set.keyIterator();
+        while (iter.next()) |k| allocator.free(k.*);
         self.set.deinit(allocator);
-        for (self.keys.items) |k| allocator.free(k);
-        self.keys.deinit(allocator);
     }
 
     pub fn put(self: *Self, key: []const u8) !void {
         const allocator = self.allocator;
         if (self.set.get(key) == null) {
             const owned = try allocator.dupe(u8, key);
-            try self.keys.append(allocator, owned);
             try self.set.put(allocator, owned, {});
         }
     }
@@ -125,4 +123,26 @@ fn clean(allocator: Allocator, ticker_regexes: TickerRegexes, fname: []const u8)
     var iter = filtered.set.keyIterator();
     while (iter.next()) |k| std.debug.print("{s} ", .{k.*});
     std.debug.print("\n", .{});
+}
+
+test "string set" {
+    var s = StringSet.init(std.testing.allocator);
+    defer s.deinit();
+
+    try s.put(@as([:0]const u8, "ZVZZT"));
+    try s.put(@as([:0]const u8, "ZWZZ"));
+    try s.put(@as([:0]const u8, "TESTA"));
+    try s.put(@as([:0]const u8, "ZXZZT"));
+
+    try s.put(@as([:0]const u8, "ZXZZT"));
+    try s.put(@as([:0]const u8, "TESTA"));
+    try s.put(@as([:0]const u8, "ZVZZT"));
+    try s.put(@as([:0]const u8, "ZWZZ"));
+
+    var iter = s.set.keyIterator();
+    try std.testing.expectEqualStrings("ZVZZT", iter.next().?.*);
+    try std.testing.expectEqualStrings("ZWZZ", iter.next().?.*);
+    try std.testing.expectEqualStrings("TESTA", iter.next().?.*);
+    try std.testing.expectEqualStrings("ZXZZT", iter.next().?.*);
+    try std.testing.expectEqual(@as(?*[]const u8, null), iter.next());
 }
