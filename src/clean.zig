@@ -40,6 +40,33 @@ pub fn main() !void {
     for (opt.positional_args.items) |f| try clean(allocator, ticker_regexes, f);
 }
 
+const StringSet = struct {
+    allocator: std.mem.Allocator,
+    set: std.StringHashMapUnmanaged(void) = .{},
+    pool: std.ArrayListUnmanaged(u8) = .{},
+
+    const Self = @This();
+
+    pub fn init(allocator: std.mem.Allocator) Self {
+        return Self{ .allocator = allocator };
+    }
+
+    pub fn deinit(self: *Self) void {
+        const allocator = self.allocator;
+        self.set.deinit(allocator);
+        self.pool.deinit(allocator);
+    }
+
+    pub fn put(self: *Self, key: []const u8) !void {
+        const allocator = self.allocator;
+        if (self.set.get(key) == null) {
+            const len = self.pool.items.len;
+            try self.pool.appendSlice(allocator, key);
+            try self.set.put(allocator, self.pool.items[len..self.pool.items.len], {});
+        }
+    }
+};
+
 fn clean(allocator: Allocator, ticker_regexes: TickerRegexes, fname: []const u8) !void {
     const basename = std.fs.path.basename(fname);
     const date = try time.Date.parse(basename);
@@ -62,7 +89,10 @@ fn clean(allocator: Allocator, ticker_regexes: TickerRegexes, fname: []const u8)
 
     var ticker_buf: [32:0]u8 = undefined;
     var line_num: usize = 0;
-    var n_filtered: usize = 0;
+    var filtered = StringSet.init(allocator);
+    defer filtered.deinit();
+    var n_lines_filtered: usize = 0;
+
     while (in.reader().streamUntilDelimiter(line.writer(), '\n', null)) : (line_num += 1) {
         defer line.clearRetainingCapacity();
 
@@ -76,7 +106,8 @@ fn clean(allocator: Allocator, ticker_regexes: TickerRegexes, fname: []const u8)
             ticker_buf[ticker.len + 1] = 0;
 
             if (ticker_regexes.matches(&ticker_buf, date)) {
-                n_filtered += 1;
+                try filtered.put(&ticker_buf);
+                n_lines_filtered += 1;
             } else {
                 try out.writer().writeAll(line.items);
                 try out.writer().writeByte('\n');
@@ -89,5 +120,8 @@ fn clean(allocator: Allocator, ticker_regexes: TickerRegexes, fname: []const u8)
 
     try std.fs.cwd().rename(new_fname, fname);
 
-    std.debug.print("filtered {d} lines\n", .{n_filtered});
+    std.debug.print("{s} filtered {d} lines for {d} tickers ", .{ fname, n_lines_filtered, filtered.set.size });
+    var iter = filtered.set.keyIterator();
+    while (iter.next()) |k| std.debug.print("{s} ", .{k});
+    std.debug.print("\n", .{});
 }
