@@ -44,22 +44,18 @@ pub fn CsvWriter(comptime T: type, comptime WriterType: type) type {
             try self.writeHeaderType(T);
         }
 
-        fn writeValue(self: *Self, value: anytype) !void {
-            var write_delim = true;
-
+        fn writeValue(self: *Self, value: anytype, is_child: bool) !void {
             switch (@typeInfo(@TypeOf(value))) {
                 .Bool => try self.writer.writeAll(if (value) "true" else "false"),
                 .Int, .Float => try self.writer.print("{d}", .{value}),
                 .Optional => {
-                    if (value != null) {
-                        try self.writeValue(value.?);
-                        write_delim = false;
-                    }
+                    if (value != null) try self.writeValue(value.?, true);
                 },
                 .Pointer => |p| switch (p.size) {
-                    .Slice => {
-                        if (p.child != u8) @compileError("unsupported slice type " ++ @typeName(p.child));
-                        if (value.len > 0) {
+                    .Slice => brk: {
+                        if (value.len == 0) break :brk;
+                        // Treat as string
+                        if (p.child == u8 and p.is_const) {
                             const needs_escape =
                                 std.mem.indexOfScalar(u8, value, self.field_delim) != null or
                                 std.mem.indexOfScalar(u8, value, self.quote) != null;
@@ -74,20 +70,26 @@ pub fn CsvWriter(comptime T: type, comptime WriterType: type) type {
                             } else {
                                 try self.writer.writeAll(value);
                             }
+                        } else {
+                            // Treat as slice
+                            const needs_escape = value.len > 1;
+                            if (needs_escape) try self.writer.writeByte(self.quote);
+                            for (value, 0..) |v, i| {
+                                try self.writeValue(v, true);
+                                if (i != value.len - 1) try self.writer.writeByte(self.field_delim);
+                            }
+                            if (needs_escape) try self.writer.writeByte(self.quote);
                         }
                     },
                     else => |t| @compileError("unsupported pointer type " ++ @tagName(t)),
                 },
                 .Struct => |s| {
-                    inline for (s.fields) |f| {
-                        try self.writeValue(@field(value, f.name));
-                    }
-                    write_delim = false;
+                    inline for (s.fields) |f| try self.writeValue(@field(value, f.name), true);
                 },
-                else => |t| @compileError("cannot serialize" ++ @typeName(t)),
+                else => |t| @compileError("cannot serialize " ++ @tagName(t)),
             }
 
-            if (write_delim) {
+            if (!is_child) {
                 self.field_i += 1;
                 if (self.field_i != n_fields) try self.writer.writeByte(self.field_delim);
             }
@@ -96,7 +98,7 @@ pub fn CsvWriter(comptime T: type, comptime WriterType: type) type {
         pub fn writeRecord(self: *Self, record: T) !void {
             self.field_i = 0;
             try self.writer.writeByte(self.record_delim);
-            try self.writeValue(record);
+            inline for (std.meta.fields(T)) |f| try self.writeValue(@field(record, f.name), false);
         }
     };
 }

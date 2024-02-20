@@ -75,6 +75,7 @@ pub fn main() !void {
         @"log-file": []const u8 = "log.txt",
 
         pub const __shorts__ = .{
+            .help = .h,
             .start = .s,
             .end = .e,
             .threads = .t,
