@@ -5,7 +5,7 @@ const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 
 const base = "https://api.polygon.io";
-const key_var = "POLYGON_KEY";
+pub const key_var = "POLYGON_KEY";
 
 const Self = @This();
 

@@ -12,11 +12,10 @@ pub fn entry(
         .target = target,
         .optimize = optimize,
     });
-    // const websocket = b.dependency("websocket", .{
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
-    // for (websocket.builder.modules.keys()) |k| std.debug.print("{s}\n", .{ k });
+    const websocket = b.dependency("websocket", .{
+        .target = target,
+        .optimize = optimize,
+    });
 
     const entry_path = "src/" ++ name ++ ".zig";
     const exe = b.addExecutable(.{
@@ -26,7 +25,7 @@ pub fn entry(
         .optimize = optimize,
     });
     exe.root_module.addImport("argparser", argparser.module("simargs"));
-    // exe.root_module.addImport("websocket", websocket.module("ws"));
+    exe.root_module.addImport("websocket", websocket.module("websocket"));
     exe.linkLibrary(lib);
     exe.addIncludePath(.{ .path = "lib" });
     b.installArtifact(exe);
