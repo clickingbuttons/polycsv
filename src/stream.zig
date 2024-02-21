@@ -4,6 +4,7 @@ const TickerRegexes = @import("./Regex.zig").TickerRegexes;
 const websocket = @import("websocket");
 const key_var = @import("./polygon.zig").key_var;
 const csv_mod = @import("./CsvWriter.zig");
+const Clickhouse = @import("./clickhouse.zig");
 
 const log = std.log;
 const Allocator = std.mem.Allocator;
@@ -104,7 +105,7 @@ pub const Trade = struct {
     // sequence number
     q: usize,
     // trf id
-    trfi: u16 = 0,
+    trfi: u8 = 0,
     // trf timestamp
     trft: usize = 0,
 };
@@ -117,7 +118,9 @@ const Handler = struct {
     client: websocket.Client,
     ca_bundle: std.crypto.Certificate.Bundle,
     allocator: std.mem.Allocator,
-    writer: csv_mod.CsvWriter(Trade, FileWriter.Writer),
+    // writer: csv_mod.CsvWriter(Trade, FileWriter.Writer),
+    // clickhouse: Clickhouse,
+    // query_buf: std.ArrayListUnmanaged(u8) = .{},
 
     pub fn init(allocator: std.mem.Allocator, api_key: ?[]const u8, channel: []const u8) !Handler {
         var writer = csv_mod.csvWriter(Trade, gzipped.writer());
@@ -160,24 +163,62 @@ const Handler = struct {
             .client = client,
             .ca_bundle = ca_bundle,
             .allocator = allocator,
-            .writer = writer,
+            // .writer = writer,
+            // .clickhouse = try Clickhouse.init(allocator, "http://localhost:8123/?async_insert=1&wait_for_async_insert=0"),
         };
     }
 
     pub fn deinit(self: *Self) void {
-        self.ca_bundle.deinit(self.allocator);
+        const allocator = self.allocator;
+        self.ca_bundle.deinit(allocator);
         self.client.deinit();
+        // self.clickhouse.deinit();
+        // self.query_buf.deinit(allocator);
     }
 
     pub fn handle(self: *Self, message: websocket.Message) !void {
         const allocator = self.allocator;
 
         const data = message.data;
-        std.debug.print("msg {s}\n", .{data});
-        const trades = try std.json.parseFromSlice([]Trade, allocator, data, .{ .ignore_unknown_fields = true });
+        std.debug.print("{d}\n", .{ data.len});
+        const trades = std.json.parseFromSlice([]Trade, allocator, data, .{ .ignore_unknown_fields = true }) catch |err| {
+            std.debug.print("could not parse ", .{});
+            for (data, 0..) |c, i| {
+                if (i > 100) break;
+                std.debug.print("{d} ", .{ c });
+            }
+            std.debug.print("\n", .{});
+            return err;
+    };
         defer trades.deinit();
 
-        for (trades.value) |t| try self.writer.writeRecord(t);
+        // self.query_buf.clearRetainingCapacity();
+        // var writer = self.query_buf.writer(allocator);
+        // try writer.writeAll("insert into us_equities.trades values ");
+        // for (trades.value) |t| {
+        //     try self.writer.writeRecord(t);
+        //     try writer.print("({d}, {d}, {s}, '{s}', fromUnixTimestamp64Milli({d}), 0, fromUnixTimestamp64Milli({d}), {d}, {d}, [", .{
+        //         t.q,
+        //         t.z,
+        //         t.i,
+        //         t.sym,
+        //         t.t,
+        //         t.trft,
+        //         t.p,
+        //         t.s,
+        //     });
+        //     for (t.c, 0..) |c, i| {
+        //         try writer.print("{d}", .{c});
+        //         if (i != t.c.len - 1) try writer.writeByte(',');
+        //     }
+        //     try writer.print("], 0, {d}, {d}), ", .{
+        //         t.x,
+        //         t.trfi,
+        //     });
+        // }
+        // const t = std.time.milliTimestamp();
+        // try self.clickhouse.query(self.query_buf.items);
+        // std.debug.print("total {d}\n", .{std.time.milliTimestamp() - t});
     }
 
     pub fn close(_: Self) void {}
