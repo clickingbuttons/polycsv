@@ -4,3 +4,5 @@ zig-out/
 log.txt
 tickers
 trades
+out.csv
+out.csv.gz

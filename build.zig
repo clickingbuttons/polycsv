@@ -25,7 +25,7 @@ pub fn entry(
         .optimize = optimize,
     });
     exe.root_module.addImport("argparser", argparser.module("simargs"));
-    exe.root_module.addImport("websocket", websocket.module("websocket"));
+    exe.root_module.addImport("websocket", websocket.module("ws"));
     exe.linkLibrary(lib);
     exe.addIncludePath(.{ .path = "lib" });
     b.installArtifact(exe);

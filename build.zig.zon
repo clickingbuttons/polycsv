@@ -1,21 +1,15 @@
 .{
-	.name = "polycsv",
-	.version = "0.0.1",
-
-	.dependencies = .{
-		.argparser = .{
-			.url = "https://github.com/jiacai2050/zigcli/archive/1e83260a431f696378ebad4bf72d25128fd26706.tar.gz",
-			.hash = "12202a9e207619ea538b0d60456391a4699864a432dfdad236bfd6cfc691663b67e8",
-		},
-		.websocket = .{
-			.url = "https://github.com/karlseguin/websocket.zig/archive/1f2c4a56c642dab52fe12cdda1bd3f56865d1f86.tar.gz",
-			.hash = "1220ce168e550f8904364acd0a72f5cafd40caa08a50ba83aac50b97ba700d7bcf20",
-		},
-	},
-	.paths = .{
-		"src",
-		"build.zig",
-		"build.zig.zon",
-		"README.md"
-	}
+    .name = "polycsv",
+    .version = "0.0.1",
+    .dependencies = .{
+        .argparser = .{
+            .url = "https://github.com/jiacai2050/zigcli/archive/1e83260a431f696378ebad4bf72d25128fd26706.tar.gz",
+            .hash = "12202a9e207619ea538b0d60456391a4699864a432dfdad236bfd6cfc691663b67e8",
+        },
+        .websocket = .{
+            .url = "../ws",
+            .hash = "12204e24d3d51318df65783aa4cf79e6e85100565cde26bb2013a06036cd7c8c2739",
+        },
+    },
+    .paths = .{ "src", "build.zig", "build.zig.zon", "README.md" },
 }
