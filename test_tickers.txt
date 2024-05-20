@@ -1,4 +1,5 @@
 ; https://www.nasdaqtrader.com/Content/ProductsServices/TRADING/TRF-Chicago-Test-Securities.xlsx
+; p[A-Z]?|(\\.WS)?\\.[A-Z]|p?\\.WD|\\.[A-Z]|p?\\.[A-Z]?CL|p[A-Z]w|\\.EC|\\.PP||\\.CV||\\.[A-Z]CV|p[A-Z]\\.(CV|WD)|r|\\.U|r?p?w|\\.Aw|\\.WSw
 ;! start=2010-01-01
 CBO
 CBX

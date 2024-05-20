@@ -1,3 +1,3 @@
-# polyzdb
+# polycsv
 
-Download [Polygon.io](https://polygon.io) trades to CSV.
+Download [Polygon.io](https://polygon.io) tickers to CSV.
