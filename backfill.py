@@ -2,6 +2,7 @@ import sys
 import gzip
 import csv
 import pathlib
+import os.path
 from polygon import RESTClient
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
@@ -48,16 +49,17 @@ fmt = "%Y-%m-%d"
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-f', '--from', default='2003-09-10')
-    parser.add_argument('-t', '--to', default=date.today().strftime(fmt))
+    parser.add_argument('--from', default='2003-09-10')
+    parser.add_argument('--to', default=date.today().strftime(fmt))
     parser.add_argument('-o', '--outdir', default='tickers')
+    parser.add_argument('--force', action='store_true')
     args = parser.parse_args()
     start = datetime.strptime(args.__getattribute__('from'), fmt)
     end = datetime.strptime(args.to, fmt)
     executor = ThreadPoolExecutor(max_workers=5)
 
     pathlib.Path(args.outdir).mkdir(parents=True, exist_ok=True)
-    futures = [executor.submit(day, args.outdir, d.strftime(fmt)) for d in daterange(start, end)]
+    futures = [executor.submit(day, args.outdir, d.strftime(fmt), args.force) for d in daterange(start, end)]
     for f in as_completed(futures):
         print(f.result())
 
@@ -73,8 +75,12 @@ def flatten(obj, member):
     for k, v in obj[member].items():
         obj[k] = v
 
-def day(outdir: str, d: str):
-    gz = gzip.open(f"{outdir}/{d}.csv.gz", 'wt')
+def day(outdir: str, d: str, force: bool):
+    path = f"{outdir}/{d}.csv.gz"
+    if not force and os.path.exists(path):
+        return f"{d} (skipped)"
+
+    gz = gzip.open(path, 'wt')
     writer = csv.DictWriter(gz, fieldnames=fieldnames, extrasaction='ignore')
     writer.writeheader()
     tickers = client.list_tickers(date=d, market='stocks', limit=1000, sort=None, order=None)
