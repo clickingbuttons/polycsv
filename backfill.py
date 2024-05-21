@@ -60,7 +60,7 @@ def main():
     pathlib.Path(args.outdir).mkdir(parents=True, exist_ok=True)
     futures = [executor.submit(day, args.outdir, d.strftime(fmt), args.force) for d in daterange(start, end)]
     for f in as_completed(futures):
-        print(f.result())
+        print(f.result(), file=sys.stderr)
 
 def daterange(start_date, end_date):
     for n in range(int((end_date - start_date).days)):
@@ -96,7 +96,7 @@ def day(outdir: str, d: str, force: bool):
         try:
             data = f.result()
         except Exception as exc:
-            print(exc)
+            print(exc, file=sys.stderr)
             sys.exit(1)
         else:
             data2 = asdict(data)
