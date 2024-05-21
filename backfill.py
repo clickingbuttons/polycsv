@@ -2,14 +2,13 @@ import sys
 import gzip
 import csv
 import pathlib
-import os.path
 from polygon import RESTClient
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 from datetime import date, timedelta, datetime
 import argparse
 
-client = RESTClient()
+client = RESTClient(retries=20, num_pools=1)
 fieldnames = [
     'ticker',
     'ticker_root',
@@ -77,7 +76,7 @@ def flatten(obj, member):
 
 def day(outdir: str, d: str, force: bool):
     path = f"{outdir}/{d}.csv.gz"
-    if not force and os.path.exists(path):
+    if not force and pathlib.Path(path).exists():
         return f"{d} (skipped)"
 
     gz = gzip.open(path, 'wt')
@@ -85,7 +84,7 @@ def day(outdir: str, d: str, force: bool):
     writer.writeheader()
     tickers = client.list_tickers(date=d, market='stocks', limit=1000, sort=None, order=None)
 
-    executor = ThreadPoolExecutor(max_workers=300)
+    executor = ThreadPoolExecutor(max_workers=50)
     futures = []
 
     for t in sorted(tickers, key=lambda t: t.ticker):
@@ -104,7 +103,9 @@ def day(outdir: str, d: str, force: bool):
             flatten(data2, 'address')
             flatten(data2, 'branding')
             writer.writerow(data2)
-        return d
+
+    gz.close()
+    return d
 
 if __name__ == '__main__':
     main()
