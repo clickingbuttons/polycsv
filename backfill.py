@@ -104,6 +104,7 @@ def day(outdir: str, d: str, force: bool):
             flatten(data2, 'branding')
             writer.writerow(data2)
 
+    gz.flush()
     gz.close()
     return d
 
