@@ -55,12 +55,16 @@ def main():
     args = parser.parse_args()
     start = datetime.strptime(args.__getattribute__('from'), fmt)
     end = datetime.strptime(args.to, fmt)
-    executor = ThreadPoolExecutor(max_workers=5)
+    executor = ThreadPoolExecutor(max_workers=3)
 
     pathlib.Path(args.outdir).mkdir(parents=True, exist_ok=True)
     futures = [executor.submit(day, args.outdir, d.strftime(fmt), args.force) for d in daterange(start, end)]
     for f in as_completed(futures):
-        print(f.result(), file=sys.stderr)
+        try:
+            print(f.result(), file=sys.stderr)
+        except Exception as exc:
+            print(exc, file=sys.stderr)
+            executor.shutdown(False, cancel_futures=True)
 
 def daterange(start_date, end_date):
     for n in range(int((end_date - start_date).days)):
@@ -97,7 +101,7 @@ def day(outdir: str, d: str, force: bool):
             data = f.result()
         except Exception as exc:
             print(exc, file=sys.stderr)
-            sys.exit(1)
+            executor.shutdown(False, cancel_futures=True)
         else:
             data2 = asdict(data)
             flatten(data2, 'address')
